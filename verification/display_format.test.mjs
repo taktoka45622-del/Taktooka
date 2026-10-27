@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {englishDigits,clock12,displayClock,displayTime,displayDateTime,groupNumberInput} from '../dist/display-format.js';
+assert.equal(englishDigits('١٥٬٠٠٠ / ۱۲۳'),'15,000 / 123');
+assert.equal(clock12(0,5),'12:05 صباحًا');
+assert.equal(clock12(12,0),'12:00 مساءً');
+assert.equal(clock12(23,59),'11:59 مساءً');
+assert.equal(displayClock('٠٧:٣٠:٠٠'),'7:30 صباحًا');
+assert.equal(displayTime('2026-10-13T20:15:00Z'),'11:15 مساءً');
+assert.equal(displayTime('2026-10-13T21:00:00Z'),'12:00 صباحًا');
+assert.equal(/[٠-٩۰-۹]/.test(displayDateTime('2026-10-13T20:15:00Z')),false);
+assert.equal(displayDateTime(null),'—');
+assert.equal(groupNumberInput('10000'),'10,000');
+assert.equal(groupNumberInput('250000'),'250,000');
+assert.equal(groupNumberInput('١٠٬٠٠٠'),'10,000');
+assert.equal(groupNumberInput('10000.50'),'10,000.50');
+console.log('13 dashboard number and 12-hour time checks passed');

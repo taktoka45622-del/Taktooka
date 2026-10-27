@@ -1,0 +1,41 @@
+begin;
+create table if not exists tkt_private.phone_attempts(phone text primary key,failures integer not null default 0,window_at timestamptz not null default now(),requests integer not null default 0);
+alter table tkt_private.phone_attempts enable row level security;
+revoke all on tkt_private.phone_attempts from public,anon,authenticated;
+create or replace function tkt_private.normalize_phone(value text) returns text language sql immutable set search_path='' as $$
+select case when d ~ '^07[0-9]{9}$' then '+964'||substr(d,2) when d ~ '^009647[0-9]{9}$' then '+'||substr(d,3) when d ~ '^9647[0-9]{9}$' then '+'||d else null end from (select regexp_replace(translate(value,'٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹','01234567890123456789'),'[^0-9]','','g') d)x $$;
+revoke all on function tkt_private.normalize_phone(text) from public,anon,authenticated;
+create or replace function public.tkt_phone_gate(p_phone text,p_op text) returns jsonb language plpgsql security definer set search_path='' as $$
+declare ph text:=tkt_private.normalize_phone(p_phone); st tkt_private.phone_attempts; ids uuid[]; item auth.users;
+begin
+if ph is null then raise exception 'INVALID_PHONE';end if;
+insert into tkt_private.phone_attempts(phone)values(ph)on conflict do nothing;
+select * into st from tkt_private.phone_attempts where phone=ph for update;
+if st.window_at<clock_timestamp()-interval '15 minutes' then update tkt_private.phone_attempts set failures=0,requests=0,window_at=clock_timestamp()where phone=ph returning * into st;end if;
+if p_op='success' then update tkt_private.phone_attempts set failures=0 where phone=ph;return '{"ok":true}';end if;
+if p_op not in ('probe','attempt','recovery')then raise exception 'UNKNOWN_ACTION';end if;
+if st.requests>=40 then return '{"limited":true}';end if;
+update tkt_private.phone_attempts set requests=requests+1 where phone=ph;
+select array_agg(distinct au.id) into ids from auth.users au left join public.tkt_profiles p on p.user_id=au.id where tkt_private.normalize_phone(au.phone)=ph or tkt_private.normalize_phone(p.phone)=ph;
+if coalesce(array_length(ids,1),0)>1 then return jsonb_build_object('exists',true,'ambiguous',true,'locked',true);end if;
+if p_op='attempt' and st.failures>=3 then return jsonb_build_object('locked',true,'remaining',0);end if;
+if p_op='attempt' then update tkt_private.phone_attempts set failures=failures+1 where phone=ph;end if;
+if ids[1] is not null then select * into item from auth.users where id=ids[1];end if;
+return jsonb_build_object('exists',item.id is not null,'user_id',item.id,'email',item.email,'auth_phone',item.phone,'locked',st.failures>=3,'remaining',greatest(0,3-st.failures-case when p_op='attempt' then 1 else 0 end));
+end $$;
+revoke all on function public.tkt_phone_gate(text,text) from public,anon,authenticated;
+grant execute on function public.tkt_phone_gate(text,text) to service_role;
+create table if not exists public.tkt_recovery_threads(id uuid primary key default gen_random_uuid(),phone text not null,name text not null default '',token_hash text not null,created_at timestamptz not null default now());
+create index if not exists tkt_recovery_phone on public.tkt_recovery_threads(phone,created_at desc);
+create table if not exists public.tkt_recovery_messages(id uuid primary key default gen_random_uuid(),thread_id uuid not null references public.tkt_recovery_threads(id)on delete cascade,body text not null check(length(body)between 1 and 2000),is_admin boolean not null default false,created_at timestamptz not null default now());
+create index if not exists tkt_recovery_thread on public.tkt_recovery_messages(thread_id,created_at);
+alter table public.tkt_recovery_threads enable row level security;
+alter table public.tkt_recovery_messages enable row level security;
+revoke all on public.tkt_recovery_threads,public.tkt_recovery_messages from public,anon,authenticated;
+grant all on public.tkt_recovery_threads,public.tkt_recovery_messages to service_role;
+grant select(id,phone,name,created_at) on public.tkt_recovery_threads to authenticated;
+grant select,insert on public.tkt_recovery_messages to authenticated;
+create policy recovery_admin_read on public.tkt_recovery_threads for select to authenticated using((select tkt_private.is_admin()) and exists(select 1 from public.tkt_profiles where user_id=(select auth.uid())and not blocked));
+create policy recovery_admin_messages on public.tkt_recovery_messages for select to authenticated using((select tkt_private.is_admin()) and exists(select 1 from public.tkt_profiles where user_id=(select auth.uid())and not blocked));
+create policy recovery_admin_reply on public.tkt_recovery_messages for insert to authenticated with check(is_admin and (select tkt_private.is_admin()) and exists(select 1 from public.tkt_profiles where user_id=(select auth.uid())and not blocked));
+commit;

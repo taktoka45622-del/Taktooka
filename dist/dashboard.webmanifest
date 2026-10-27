@@ -1,0 +1,26 @@
+{
+  "id": "./?app=dashboard",
+  "name": "تكتوكة | لوحة الإدارة",
+  "short_name": "إدارة تكتوكة",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./?app=dashboard",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f7fb",
+  "theme_color": "#d90036",
+  "icons": [
+    {
+      "src": "agents/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "agents/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

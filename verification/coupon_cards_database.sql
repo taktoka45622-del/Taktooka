@@ -1,0 +1,33 @@
+begin;
+do $test$
+declare admin_id uuid:=gen_random_uuid(); customer uuid:=gen_random_uuid(); batch_id uuid:=gen_random_uuid(); second_id uuid:=gen_random_uuid(); data jsonb; duplicate jsonb; expiry timestamptz:=now()+interval '30 days'; first_code text; denied boolean;
+begin
+ insert into auth.users(id,email)values(admin_id,admin_id||'@example.invalid'),(customer,customer||'@example.invalid');
+ insert into public.tkt_profiles(user_id,name,phone)values(admin_id,'QA card admin','07000000005'),(customer,'QA card customer','07000000006');
+ insert into public.tkt_admins(user_id)values(admin_id);
+ perform set_config('request.jwt.claim.sub',admin_id::text,true);
+ data:=public.tkt_coupon_cards('generate',jsonb_build_object('id',batch_id,'count',15,'expires_at',expiry));
+ if jsonb_array_length(data->'codes')<>15 then raise exception 'TEST_CARD_COUNT';end if;
+ if exists(select 1 from jsonb_array_elements_text(data->'codes') x(code) where code !~ '^[0-9]{10}$') then raise exception 'TEST_TEN_DIGITS';end if;
+ if (select count(distinct code) from jsonb_array_elements_text(data->'codes') x(code))<>15 then raise exception 'TEST_UNIQUE';end if;
+ if exists(select 1 from tkt_private.coupons c where c.batch_id= (data->>'id')::uuid and (max_uses<>1 or reward_type<>'free_ride')) then raise exception 'TEST_PRINTED_SINGLE_USE';end if;
+ duplicate:=public.tkt_coupon_cards('generate',jsonb_build_object('id',batch_id,'count',15,'expires_at',expiry));
+ if data<>duplicate then raise exception 'TEST_RETRY_CHANGED_BATCH';end if;
+ if (select count(*) from tkt_private.coupons c where c.batch_id= (data->>'id')::uuid)<>15 then raise exception 'TEST_RETRY_DUPLICATES';end if;
+ first_code:=data->'codes'->>0;
+ duplicate:=public.tkt_coupon_cards('generate',jsonb_build_object('id',second_id,'count',2,'expires_at',expiry,'first_code',first_code));
+ if duplicate->'codes'->>0=first_code then raise exception 'TEST_CODE_COLLISION';end if;
+ if jsonb_array_length(public.tkt_coupon_cards('get',jsonb_build_object('id',batch_id))->'codes')<>15 then raise exception 'TEST_REDOWNLOAD';end if;
+ denied:=false;begin update tkt_private.coupons set max_uses=2 where code=first_code;exception when check_violation then denied:=true;end;
+ if not denied then raise exception 'TEST_PREVENT_MULTIPLE_REDEMPTION';end if;
+ denied:=false;begin perform public.tkt_coupon_cards('generate',jsonb_build_object('id',batch_id,'count',14,'expires_at',expiry));exception when others then if sqlerrm='CARD_BATCH_CONFLICT' then denied:=true;else raise;end if;end;
+ if not denied then raise exception 'TEST_REQUEST_CONFLICT';end if;
+ denied:=false;begin perform public.tkt_coupon_cards('generate',jsonb_build_object('id',gen_random_uuid(),'count',501,'expires_at',expiry));exception when others then if sqlerrm='INVALID_CARD_BATCH' then denied:=true;else raise;end if;end;
+ if not denied then raise exception 'TEST_LIMIT';end if;
+ perform set_config('request.jwt.claim.sub',customer::text,true);
+ denied:=false;begin perform public.tkt_coupon_cards('get',jsonb_build_object('id',batch_id));exception when others then if sqlerrm='PERMISSION_DENIED' then denied:=true;else raise;end if;end;
+ if not denied then raise exception 'TEST_CUSTOMER_DENIED';end if;
+ if has_function_privilege('anon','public.tkt_coupon_cards(text,jsonb)','EXECUTE') then raise exception 'TEST_ANON_EXECUTE';end if;
+end $test$;
+select '15 unique 10-digit codes, single-use vouchers, retry safety, collision recovery, re-download, count limits and authorization passed' as checks;
+rollback;

@@ -1,0 +1,1 @@
+{"name":"xspace-server-verification","private":true,"type":"module","scripts":{"test":"node server_test.mjs"},"dependencies":{"@electric-sql/pglite":"0.5.8"}}

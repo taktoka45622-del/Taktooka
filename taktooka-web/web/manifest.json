@@ -1,0 +1,1 @@
+{"name": "Taktooka Taxi Web App", "short_name": "Taktooka Taxi", "start_url": "./", "scope": "./", "display": "standalone", "background_color": "#ffffff", "theme_color": "#df1e2b", "description": "تكتوكة ويب للزبون والكابتن", "lang": "ar", "dir": "rtl", "orientation": "any", "icons": [{"src": "icons/logo.png", "sizes": "any", "type": "image/png", "purpose": "any"}]}

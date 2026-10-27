@@ -1,0 +1,33 @@
+
+> test
+> node verification/dom-test.cjs && node supabase/verify.mjs
+
+PASS login form rendered
+PASS empty route home
+PASS empty route orders
+PASS empty route products
+PASS empty route categories
+PASS empty route merchants
+PASS empty route finance
+PASS empty route support
+PASS empty route exchange
+PASS empty route notifications
+PASS empty route settings
+PASS empty route audit
+PASS search finds real order fixture
+PASS customer text escaped
+PASS status filter excludes pending
+PASS order status control present
+PASS historical line item shown
+PASS product stock editor initialized
+PASS wholesale editor initialized
+PASS merchant details render
+PASS merchant balances section present
+21 DOM checks passed (mock data, no live writes)
+PASS merchant denied admin access
+PASS merchant cannot broadcast
+PASS owner admin access
+PASS admin notification saved
+PASS catalogue audit written
+PASS settings audit written
+PASS anonymous access RPC denied

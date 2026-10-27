@@ -1,0 +1,50 @@
+name: Deploy dashboard and Taktooka Web to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+env:
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.0'
+          channel: stable
+          cache: true
+      - name: Resolve web dependencies
+        working-directory: taktooka-web
+        run: flutter pub get --enforce-lockfile
+      - name: Check Flutter source
+        working-directory: taktooka-web
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings lib
+      - name: Test tracking, notifications and booking
+        working-directory: taktooka-web
+        run: flutter test test/background_tracking_test.dart test/offer_ring_test.dart test/ride_booking_regression_test.dart
+      - name: Build Taktooka Web
+        working-directory: taktooka-web
+        run: flutter build web --release --base-href /Taktooka/app/ --pwa-strategy=none --no-web-resources-cdn
+      - name: Add independent web app to Pages
+        run: |
+          mkdir -p dist/app
+          cp -R taktooka-web/build/web/. dist/app/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

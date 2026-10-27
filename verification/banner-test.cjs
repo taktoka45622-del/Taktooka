@@ -1,0 +1,32 @@
+const fs=require('fs'),vm=require('vm'),{JSDOM}=require('jsdom');
+const dom=new JSDOM(fs.readFileSync('dist/index.html','utf8'),{url:'https://example.test',runScripts:'outside-only'}),w=dom.window;
+w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};
+w.matchMedia=()=>({matches:true,addEventListener(){}});w.scrollTo=()=>{};
+w.createClient=()=>({auth:{onAuthStateChange(){}}});
+const s=fs.readFileSync('src/app.js','utf8').replace("import {createClient} from '@supabase/supabase-js';",'').replace(/start\(\);\s*$/,'');
+vm.runInContext(s,dom.getInternalVMContext());const run=s=>vm.runInContext(s,dom.getInternalVMContext());
+let count=0;function test(ok,msg){if(!ok)throw Error(msg);count++;console.log('PASS '+msg)}
+(async()=>{
+run(`data={x_categories:[{id:'c1',name:'المنزل',active:true,sort_order:0},{id:'c2',name:'مخفي',active:false,sort_order:1}],x_banners:[{id:'b1',asset:'https://example.test/banner.png',target_url:'xspace://category/c1',active:true,sort_order:0}]};preview=false;allowed=true;user={id:'admin'};route='categories';render();refresh=async()=>{};window.writes=[];sb.from=table=>({upsert:async value=>{writes.push({table,value});return {data:value}},delete:()=>({eq:(key,id)=>({select:()=>({single:async()=>{writes.push({table,delete:id});return {data:{id}}}})})})});`);
+test(w.document.querySelector('[data-action="banner-delete"]'),'delete button visible');
+run("bannerForm('b1')");
+test(w.document.querySelector('#banner-target-type').value==='category','category target restored on edit');
+test(w.document.querySelector('#banner-category').value==='c1','saved section selected');
+test(w.document.querySelectorAll('#banner-category option').length===2,'hidden categories excluded');
+test(w.document.querySelector('#banner-url-fields').hidden,'URL field hidden for section');
+test(w.document.querySelector('#f-target').disabled,'URL validation disabled for section');
+await w.document.querySelector('#modal-form').onsubmit({preventDefault(){},currentTarget:w.document.querySelector('#modal-form')});
+test(w.writes[0].value.target_url==='xspace://category/c1','publishing stores stable category ID');
+run("bannerForm('b1')");let type=w.document.querySelector('#banner-target-type');type.value='url';type.dispatchEvent(new w.Event('change'));w.document.querySelector('#f-target').value='https://example.test/sale';
+await w.document.querySelector('#modal-form').onsubmit({preventDefault(){},currentTarget:w.document.querySelector('#modal-form')});
+test(w.writes[1].value.target_url==='https://example.test/sale','switch to link persists URL');
+run("bannerForm('b1')");type=w.document.querySelector('#banner-target-type');type.value='none';type.dispatchEvent(new w.Event('change'));
+await w.document.querySelector('#modal-form').onsubmit({preventDefault(){},currentTarget:w.document.querySelector('#modal-form')});
+test(w.writes[2].value.target_url===null,'remove destination clears previous category');
+await run("action('banner-delete','b1',null)");test(w.writes.length===3,'delete waits for confirmation');
+await run("action('close','',null)");test(w.writes.length===3,'cancel does not delete');
+await run("action('banner-delete','b1',null)");
+await w.document.querySelector('#modal-form').onsubmit({preventDefault(){},currentTarget:w.document.querySelector('#modal-form')});
+test(w.writes[3].delete==='b1'&&w.writes[3].table==='x_banners','confirm deletes only selected banner');
+console.log(count+' banner checks passed');w.close();
+})().catch(e=>{console.error(e);w.close();process.exitCode=1});

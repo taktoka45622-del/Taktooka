@@ -1,0 +1,19 @@
+{
+  "name": "xspace-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/app.js --bundle --minify --format=esm --outfile=dist/app.js",
+    "test": "node verification/dom-test.cjs && node supabase/verify.mjs && node verification/landing-booking-test.cjs && node verification/landing-business-test.mjs",
+    "test:taktooka": "node verification/taktooka-dashboard.test.mjs",
+    "test:inventory": "node verification/inventory-staff-db.test.mjs && node verification/inventory-staff-ui.test.mjs && node verification/notifications.test.mjs && node verification/staff-auth.test.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.57.4"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.14",
+    "esbuild": "0.25.10",
+    "jsdom": "^26.1.0"
+  }
+}

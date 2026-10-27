@@ -1,0 +1,20 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const pdfSource=fs.readFileSync(new URL('../src/coupon-card-pdf.js',import.meta.url),'utf8');
+const pdfUrl='data:text/javascript;base64,'+Buffer.from(pdfSource).toString('base64');
+const source=fs.readFileSync(new URL('../src/coupon-card-printer.js',import.meta.url),'utf8').replace("'./coupon-card-pdf.js?v=1.6.68'",JSON.stringify(pdfUrl));
+const {createCouponCardPrinter,randomCardCode}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const random=Array.from({length:1000},randomCardCode);assert.equal(new Set(random).size,1000);assert.ok(random.every(c=>/^[1-9][0-9]{9}$/.test(c)));
+class Element {constructor(){this.children=[];this.parentElement={};this._value='';}set value(v){this._value=String(v);}get value(){return this._value;}append(...nodes){this.children.push(...nodes);}replaceChildren(...nodes){this.children=nodes;}}
+const ids=['downloadCards','cardCount','cardOptions','rewardCode','rewardUses','rewardSave','cardPreviewCode','rewardExpiry','rewardActive','cardGenerated','cardBatches'];
+const elements=Object.fromEntries(ids.map(id=>[id,new Element()]));elements.cardCount.value='1,005';elements.rewardExpiry.value='2030-01-01T00:00';elements.rewardActive.checked=true;
+const document={getElementById:id=>elements[id],createElement:()=>new Element()};let editable=true,fail=true;const batches=new Map(),requests=[],downloads=[];
+const rpc=async(action,data)=>{if(action==='start'){requests.push(data);if(!batches.has(data.id))batches.set(data.id,{id:data.id,card_count:data.count,generated_count:0,codes:[],created_at:'2026-10-14',used_cards:0});if(fail){fail=false;throw new Error('network');}return {...batches.get(data.id)};}if(action==='fill'){const b=batches.get(data.id);if(data.after===b.generated_count){const end=Math.min(b.card_count,b.generated_count+500);for(let i=b.generated_count;i<end;i++)b.codes.push(String(1000000000+i));b.generated_count=end;}return {...b};}if(action==='get_page'){const b=batches.get(data.id);return {...b,codes:b.codes.slice(data.offset,data.offset+data.limit)};}if(action==='list')return [...batches.values()];};
+const ui=createCouponCardPrinter({document,rpc,canEdit:()=>editable,run:fn=>fn(),notify:()=>{},dates:x=>x,template:async()=>({}),build:({codes})=>new TextEncoder().encode(codes.join(',')),download:(bytes,name)=>downloads.push({bytes,name})});
+ui.mode({free:true,editing:false});assert.match(elements.rewardCode.value,/^\d{10}$/);assert.equal(elements.rewardUses.value,'1');assert.equal(elements.cardOptions.hidden,false);assert.equal(elements.rewardCode.readOnly,true);
+await assert.rejects(()=>ui.generate(),/network/);await ui.generate();assert.equal(requests[0].id,requests[1].id);assert.equal(batches.size,1);assert.equal(elements.downloadCards.disabled,false);elements.downloadCards.onclick();assert.equal(downloads.length,1);assert.match(downloads[0].name,/Free-Rides-1005/);assert.equal(new TextDecoder().decode(downloads[0].bytes).split(',').length,1005);
+await elements.cardBatches.children[0].children.at(-1).onclick();assert.equal(downloads.length,2);assert.deepEqual(downloads[0].bytes,downloads[1].bytes);
+ui.mode({free:false,editing:false});assert.equal(elements.cardOptions.hidden,true);assert.equal(elements.cardCount.disabled,true);
+ui.mode({free:true,editing:true});assert.equal(elements.cardOptions.hidden,true);
+editable=false;ui.mode({free:true,editing:false});const count=requests.length;await ui.generate();assert.equal(requests.length,count);
+console.log('Card printer: 10-digit codes, retry safety, PDF download, saved-batch re-download and permissions passed');

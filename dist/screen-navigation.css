@@ -1,0 +1,12 @@
+body.section-screen-open,body.detail-open{overflow:hidden}
+dialog.section-screen,#detailDialog{position:fixed;inset:0;margin:0;width:100%;max-width:none;height:100dvh;max-height:100dvh;border:0;border-radius:0;padding:0;background:#f5f7fb;color:#142642;overflow-y:auto;overscroll-behavior:contain}
+.section-screen::backdrop,#detailDialog::backdrop{background:#f5f7fb}
+.section-screen-head,#detailDialog .dialog-head{position:sticky;top:0;z-index:1050;display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:76px;padding:16px max(24px,calc((100vw - 1160px)/2));padding-top:max(16px,env(safe-area-inset-top));border-bottom:1px solid #e4e9f1;background:white;box-shadow:0 3px 14px #14264208;margin:0}
+.section-screen-head h2,#detailDialog .dialog-head h2{font-size:22px;margin:0;overflow-wrap:anywhere;flex:1}
+.section-screen-head button,#detailDialog .dialog-head button{flex-shrink:0;min-height:44px;background:#edf1f7;color:#344764;border-radius:12px;border:0;padding:10px 18px;cursor:pointer;font:inherit;font-weight:700}
+.section-screen-body,#detailBody{max-width:1160px;margin:0 auto;padding:24px 24px calc(32px + env(safe-area-inset-bottom));overflow-wrap:anywhere}
+.section-screen-body>.card{margin:0 0 18px}.section-screen-body>#captainBox,.section-screen-body>#receipt,.section-screen-body>#recovery{background:white;border:1px solid #e5eaf1;border-radius:18px;padding:24px;margin:0}
+#detailBody>.profile-heading{background:white;border-radius:18px;padding:20px}#detailBody>.profile-section,#detailBody>.profile-summary{background:white;border-radius:16px;padding:20px;margin:16px 0}
+#detailBody input,#detailBody textarea,#detailBody select{max-width:100%}.section-screen-body .inventory-details{display:block}
+@media(max-width:760px){.section-screen-head,#detailDialog .dialog-head{min-height:70px;padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top))}.section-screen-head h2,#detailDialog .dialog-head h2{font-size:19px}.section-screen-body,#detailBody{padding:18px 14px calc(24px + env(safe-area-inset-bottom))}.section-screen-body>#captainBox,.section-screen-body>#receipt,.section-screen-body>#recovery{padding:20px 16px}}
+@media print{dialog.section-screen,#detailDialog{position:static;height:auto;max-height:none;overflow:visible}.section-screen-head,#detailDialog .dialog-head{display:none}}

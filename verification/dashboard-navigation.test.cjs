@@ -1,0 +1,22 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const handlers=new Map(),storage=new Map(),notices=[];let screen={page:'inventory',sections:[],detail:null,scroll:0,filters:{q:'first'}},entries=[{external:true}],at=0;
+const win={scrollTo:({top})=>{screen.scroll=top},close(){},addEventListener:(n,f)=>handlers.set(n,f),removeEventListener:n=>handlers.delete(n)};
+const history={get state(){return entries[at]},get length(){return entries.length},replaceState:s=>entries[at]=structuredClone(s),pushState(s){entries=entries.slice(0,at+1);entries.push(structuredClone(s));at++},back(){if(at){at--;handlers.get('popstate')?.({state:structuredClone(entries[at])})}}};
+const ctx=vm.createContext({history,window:win,document:{addEventListener(){},removeEventListener(){},getElementById:()=>null},sessionStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},setTimeout,clearTimeout,requestAnimationFrame:f=>setTimeout(f,0),Date,JSON,Promise});
+let src=fs.readFileSync(require('node:path').join(__dirname,'../src/app-navigation.js'),'utf8').replaceAll('export ','');vm.runInContext(src+';globalThis.make=createAppNavigation',ctx);
+const tick=()=>new Promise(r=>setTimeout(r,20));
+(async()=>{
+ const nav=ctx.make({key:'test',capture:()=>structuredClone(screen),restore:async s=>{screen=structuredClone(s)},notify:m=>notices.push(m)});await nav.start();
+ screen.scroll=340;screen.filters.q='بحث';nav.save();
+ nav.begin();screen.detail={name:'operations:center',args:[]};nav.commit();nav.save();nav.end();assert.equal(at,2);
+ nav.begin();nav.begin();screen.detail={name:'trackLine',args:['line-1']};nav.commit();nav.end();nav.end();assert.equal(at,3);
+ nav.back();nav.back();await tick();assert.equal(screen.detail.name,'operations:center');assert.equal(at,2);
+ nav.back();await tick();assert.equal(screen.detail,null);assert.equal(screen.scroll,340);assert.equal(screen.filters.q,'بحث');
+ nav.begin();screen.filters.q='جديد';nav.end();assert.equal(at,1,'filters do not create back steps');
+ nav.begin();screen.sections=[{id:'inventoryDetails'}];nav.commit();screen.detail={name:'openUserProfile',args:['user']};nav.end();assert.equal(at,2,'single action creates one entry');
+ nav.begin();screen.detail={name:'trackLine',args:['loading']};history.back();nav.end();await tick();assert.equal(screen.sections.length,0,'browser Back during loading restores target after action completes');
+ nav.begin();screen.detail={name:'editUser',args:[{user_id:'u',name:'Before'}]};nav.end();const formAt=at;nav.begin();screen.detail=null;nav.end();await tick();assert.equal(at,formAt-1,'successful form close returns to previous context');assert.equal(screen.detail,null);
+ screen.sections=[{id:'staffEditor'}];nav.commit();screen.sections=[];nav.save();assert.equal(history.state.snapshot.sections.length,1,'transient capture cannot overwrite parent');
+ nav.back();await tick();nav.back();await tick();assert.equal(notices.at(-1),'اضغط رجوع مرة ثانية للخروج');
+ nav.clear();console.log('PASS: nested details, one-step Back, repeated-click guard, scroll/search restoration, filters, transaction batching, transient-state guard, root exit');
+})().catch(e=>{console.error(e);process.exitCode=1});

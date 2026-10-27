@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {createRenderCache,createRequestTracker} from '../dist/performance.js';
+const cache=createRenderCache();
+assert.equal(cache.changed('list',{rows:[{id:1,status:'accepted'}],server_now:'one'}),true);
+assert.equal(cache.changed('list',{rows:[{id:1,status:'accepted'}],server_now:'two'}),false);
+assert.equal(cache.changed('list',{rows:[{id:1,status:'completed'}]}),true);
+cache.clear();assert.equal(cache.changed('list',{rows:[{id:1,status:'completed'}]}),true);
+const requests=createRequestTracker(),old=requests.next('search'),current=requests.next('search');
+assert.equal(requests.current(old),false);assert.equal(requests.current(current),true);
+requests.invalidate('search');assert.equal(requests.current(current),false);
+const beforeNavigation=requests.next('rides');requests.clear();assert.equal(requests.current(beforeNavigation),false);
+const afterNavigation=requests.next('rides');assert.equal(requests.current(afterNavigation),true);
+console.log('9 unchanged-render and stale-response checks passed');
