@@ -207,13 +207,26 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
   }
 
   void pick(String slot) => run(() async {
-    if (kIsWeb) throw StateError('التسجيل بالكاميرا متاح من تطبيق الهاتف');
     application = await captainRegistration(b, 'save', {
       ...fields(),
       'pending_slot': slot,
     });
     if (!mounted) return;
-    if (slot == 'portrait') {
+    if (kIsWeb) {
+      final file = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+        imageQuality: 90,
+        requestFullMetadata: false,
+      );
+      if (file != null) {
+        await upload(slot, file);
+      } else {
+        application = await captainRegistration(b, 'save', {
+          'pending_slot': null,
+        });
+      }
+    } else if (slot == 'portrait') {
       final file = await picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 2000,
