@@ -21,7 +21,8 @@ List<HistoryJson> filterTripHistory(
   ];
   final times = Map<HistoryJson, DateTime>.identity();
   for (final entry in entries) {
-    times[entry] = DateTime.tryParse('${entry['history_at']}') ?? DateTime(2000);
+    times[entry] =
+        DateTime.tryParse('${entry['history_at']}') ?? DateTime(2000);
   }
   entries.sort((a, b) {
     final time = times[b]!.compareTo(times[a]!);

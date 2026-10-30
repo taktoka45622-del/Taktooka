@@ -91,7 +91,7 @@ void main() {
       center.startRing('second', null);
       await tester.pump();
       expect(audio.plays, 2);
-      // Delayed cancellation of an old offer must not silence the new offer.
+
       await center.silenceOffer('first');
       expect(audio.playing, true);
       expect(center.ringing, 'second');
@@ -104,7 +104,7 @@ void main() {
       await tester.pump();
       expect(audio.plays, 3);
       center
-          .syncOffers(); // The offer has been cancelled/removed from the feed.
+          .syncOffers();
       await tester.pump();
       expect(audio.playing, false);
       center.dispose();

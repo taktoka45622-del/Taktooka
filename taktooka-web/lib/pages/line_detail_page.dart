@@ -1,3 +1,6 @@
+import 'package:taktooka/services/map_navigation.dart';
+import 'package:taktooka/widgets/app_notice.dart';
+import 'package:taktooka/core/route_visibility.dart';
 import 'package:taktooka/services/page_snapshot_cache.dart';
 import 'package:taktooka/widgets/line_section.dart';
 import 'package:taktooka/services/refresh_gate.dart';
@@ -241,18 +244,15 @@ class _LineDetailPageState extends State<LineDetailPage> {
         );
       } else if (extra['mode'] == 'destination' && data != null) {
         final line = Json.from(data!['line']);
-        await launchUrl(
-          Uri.parse(
-            'https://waze.com/ul?navigate=yes&ll=${line['destination_lat']},${line['destination_lng']}',
+        await openPoint(
+          LatLng(
+            (line['destination_lat'] as num).toDouble(),
+            (line['destination_lng'] as num).toDouble(),
           ),
-          mode: LaunchMode.externalApplication,
         );
       }
     } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: AppText(lineError(e))));
+      if (mounted) showAppNotice(context, lineError(e));
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -297,12 +297,13 @@ class _LineDetailPageState extends State<LineDetailPage> {
     }
   }
 
-  Future<void> openPoint(LatLng point) => launchUrl(
-    Uri.parse(
-      'https://waze.com/ul?navigate=yes&ll=${point.latitude},${point.longitude}',
-    ),
-    mode: LaunchMode.externalApplication,
-  ).then((_) {});
+  Future<void> openPoint(LatLng point, {bool choose = false}) =>
+      MapNavigation.open(
+        context,
+        point.latitude,
+        point.longitude,
+        choose: choose,
+      );
 
   Widget contactPhone(dynamic value) {
     final phone = '${value ?? ''}';
@@ -454,6 +455,7 @@ class _LineDetailPageState extends State<LineDetailPage> {
               fact('نقطة الانطلاق', l['pickup_name']),
               OutlinedButton.icon(
                 onPressed: () => openPoint(pickup),
+                onLongPress: () => openPoint(pickup, choose: true),
                 icon: const Icon(Icons.location_on, color: scarlet),
                 label: const AppText('عرض نقطة الانطلاق على الخريطة'),
               ),
@@ -461,6 +463,7 @@ class _LineDetailPageState extends State<LineDetailPage> {
               fact('نقطة الوصول', l['destination_name']),
               OutlinedButton.icon(
                 onPressed: () => openPoint(destination),
+                onLongPress: () => openPoint(destination, choose: true),
                 icon: const Icon(Icons.location_on, color: Colors.blue),
                 label: const AppText('عرض نقطة الوصول على الخريطة'),
               ),
@@ -622,7 +625,11 @@ class _LineDetailPageState extends State<LineDetailPage> {
                   ),
                   children: [
                     const BookingMapLayer(),
-                    if (routePoints.length > 1)
+                    if (showTripRoute(
+                          captainView: widget.b.captain && !owner,
+                          status: l['status'] as String?,
+                        ) &&
+                        routePoints.length > 1)
                       PolylineLayer(
                         polylines: [
                           Polyline(
@@ -656,11 +663,12 @@ class _LineDetailPageState extends State<LineDetailPage> {
               ),
             if (mine)
               OutlinedButton.icon(
-                onPressed: () => launchUrl(
-                  Uri.parse(
-                    'https://waze.com/ul?navigate=yes&ll=${active?['state'] == 'picked_up' ? destination.latitude : pickup.latitude},${active?['state'] == 'picked_up' ? destination.longitude : pickup.longitude}',
-                  ),
-                  mode: LaunchMode.externalApplication,
+                onPressed: () => openPoint(
+                  active?['state'] == 'picked_up' ? destination : pickup,
+                ),
+                onLongPress: () => openPoint(
+                  active?['state'] == 'picked_up' ? destination : pickup,
+                  choose: true,
                 ),
                 icon: const Icon(Icons.navigation),
                 label: AppText(
@@ -756,11 +764,18 @@ class _LineDetailPageState extends State<LineDetailPage> {
                       AppText(passenger['passenger_name'], style: heading(17)),
                       AppText(passenger['destination_name']),
                       OutlinedButton.icon(
-                        onPressed: () => launchUrl(
-                          Uri.parse(
-                            'https://waze.com/ul?navigate=yes&ll=${passenger['destination_lat']},${passenger['destination_lng']}',
+                        onPressed: () => openPoint(
+                          LatLng(
+                            (passenger['destination_lat'] as num).toDouble(),
+                            (passenger['destination_lng'] as num).toDouble(),
                           ),
-                          mode: LaunchMode.externalApplication,
+                        ),
+                        onLongPress: () => openPoint(
+                          LatLng(
+                            (passenger['destination_lat'] as num).toDouble(),
+                            (passenger['destination_lng'] as num).toDouble(),
+                          ),
+                          choose: true,
                         ),
                         icon: const Icon(Icons.navigation),
                         label: const AppText('الذهاب لهذه الوجهة'),

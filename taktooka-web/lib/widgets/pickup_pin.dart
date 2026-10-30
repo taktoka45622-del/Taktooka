@@ -6,9 +6,10 @@ class PickupPin extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    tween: Tween(end: moving ? 6.0 : 0.0),
+    tween: Tween(end: moving ? 4.0 : 0.0),
     duration: MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero : const Duration(milliseconds: 160),
+        ? Duration.zero
+        : const Duration(milliseconds: 130),
     curve: Curves.easeOutCubic,
     builder: (context, lift, child) =>
         CustomPaint(size: const Size(48, 64), painter: _PickupPinPainter(lift)),

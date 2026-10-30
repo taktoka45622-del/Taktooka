@@ -23,6 +23,14 @@ Position fix(double latitude) => Position(
 
 class GPS extends GeolocatorPlatform {
   final updates = StreamController<Position>();
+  @override
+  Future<LocationPermission> checkPermission() async =>
+      LocationPermission.always;
+  @override
+  Future<LocationPermission> requestPermission() async =>
+      LocationPermission.always;
+  @override
+  Future<bool> isLocationServiceEnabled() async => true;
   LocationSettings? settings;
   @override
   Stream<Position> getPositionStream({LocationSettings? locationSettings}) {
@@ -41,6 +49,8 @@ class TrackingBackend extends Backend {
   bool get loggedIn => true;
   @override
   Future<Position> locate({bool fresh = false}) async => fix(33.54);
+  @override
+  Future<Position> locatePrecise() => locate(fresh: true);
   @override
   Future<void> refresh({
     bool lightweight = false,

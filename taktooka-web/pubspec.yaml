@@ -1,11 +1,12 @@
 name: taktooka
 description: تطبيق تكتوكة للمستخدم والكابتن
 publish_to: none
-version: 1.6.67+123
+version: 1.7.0+156
 environment:
   sdk: '>=3.10.0 <4.0.0'
   flutter: '>=3.41.0'
 dependencies:
+  connectivity_plus: 6.1.5
   intl: ^0.20.2
   flutter:
     sdk: flutter
@@ -13,13 +14,16 @@ dependencies:
     sdk: flutter
   supabase_flutter: 2.10.3
   flutter_map: 8.2.2
-  vector_map_tiles: 9.0.0-beta.8
+  vector_map_tiles:
+    path: vendor/vector_map_tiles
   vector_tile_renderer: 6.0.0
   latlong2: 0.9.1
   geolocator: 14.0.2
   url_launcher: 6.3.2
   uuid: 4.5.1
   http: 1.6.0
+  crypto: 3.0.7
+  path_provider: 2.1.5
   audioplayers: 6.7.1
   image_picker: 1.2.1
   camera: 0.11.2
@@ -41,7 +45,10 @@ flutter:
     - assets/hero.png
     - assets/ride_search/
     - assets/audio/
+    - assets/captain/
+    - assets/onboarding/
     - assets/mapbox-logo.png
+    - assets/map_tuktuk_3d.png
 
   fonts:
     - family: Cairo

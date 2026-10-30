@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Future<void> mockMapCacheDirectories() async {
+  TestWidgetsFlutterBinding.ensureInitialized();
   final directory = await Directory.systemTemp.createTemp('taktooka-map-test-');
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(

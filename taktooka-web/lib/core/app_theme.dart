@@ -5,6 +5,17 @@ import 'package:taktooka/core/ride_format.dart';
 
 ThemeData appTheme() => ThemeData(
   useMaterial3: true,
+  visualDensity: VisualDensity.standard,
+  materialTapTargetSize: MaterialTapTargetSize.padded,
+  iconButtonTheme: IconButtonThemeData(
+    style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+  ),
+  textButtonTheme: TextButtonThemeData(
+    style: TextButton.styleFrom(
+      minimumSize: const Size(48, 48),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    ),
+  ),
   fontFamily: 'Cairo',
   appBarTheme: const AppBarTheme(
     backgroundColor: Colors.white,
@@ -30,6 +41,7 @@ ThemeData appTheme() => ThemeData(
   filledButtonTheme: FilledButtonThemeData(
     style: FilledButton.styleFrom(
       minimumSize: const Size.fromHeight(52),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
   ),
@@ -37,6 +49,7 @@ ThemeData appTheme() => ThemeData(
   outlinedButtonTheme: OutlinedButtonThemeData(
     style: OutlinedButton.styleFrom(
       minimumSize: const Size(0, 48),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       side: const BorderSide(color: red),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
@@ -74,6 +87,17 @@ ThemeData appTheme() => ThemeData(
 ThemeData appDarkTheme() => ThemeData(
   brightness: Brightness.dark,
   useMaterial3: true,
+  visualDensity: VisualDensity.standard,
+  materialTapTargetSize: MaterialTapTargetSize.padded,
+  iconButtonTheme: IconButtonThemeData(
+    style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+  ),
+  textButtonTheme: TextButtonThemeData(
+    style: TextButton.styleFrom(
+      minimumSize: const Size(48, 48),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    ),
+  ),
   fontFamily: 'Cairo',
   scaffoldBackgroundColor: const Color(0xff111318),
   colorScheme: ColorScheme.fromSeed(
@@ -95,6 +119,7 @@ ThemeData appDarkTheme() => ThemeData(
   outlinedButtonTheme: OutlinedButtonThemeData(
     style: OutlinedButton.styleFrom(
       minimumSize: const Size(0, 48),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
   ),
@@ -108,6 +133,7 @@ ThemeData appDarkTheme() => ThemeData(
       backgroundColor: red,
       foregroundColor: Colors.white,
       minimumSize: const Size.fromHeight(52),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
   ),

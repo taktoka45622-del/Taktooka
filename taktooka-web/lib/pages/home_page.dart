@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:taktooka/pages/commerce_page.dart';
 
 import 'package:taktooka/core/design.dart';
 import 'package:taktooka/core/gender_copy.dart';
@@ -171,13 +172,22 @@ class HomePage extends StatelessWidget {
             const SizedBox(height: 14),
             Row(
               children: [
-                shortcut(context, Icons.route, 'الخطوط', lines, scarlet),
-                shortcut(context, Icons.local_offer, 'العروض', offers, scarlet),
+                if (!b.captain ||
+                    (!b.commissionPlan && b.commerce['vehicle'] != 'bike'))
+                  shortcut(context, Icons.route, 'الخطوط', lines, scarlet),
+                shortcut(
+                  context,
+                  Icons.restaurant,
+                  b.captain ? 'طلبات الطعام' : 'طعام',
+                  () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => FoodPage(b: b))),
+                  scarlet,
+                ),
                 if (!b.captain)
                   shortcut(
                     context,
                     Icons.person_add_alt_1,
-                    'سجّل كابتن',
+                    'تسجيل',
                     apply,
                     ink,
                   ),
@@ -187,7 +197,11 @@ class HomePage extends StatelessWidget {
             if (!b.captain)
               BannerCarousel(
                 images: banners.where((x) => x['slot'] == 2).toList(),
-                aspectRatio: 3.25,
+                aspectRatio:
+                    MediaQuery.sizeOf(context).width < 430 ||
+                        MediaQuery.textScalerOf(context).scale(16) > 20
+                    ? 2.2
+                    : 3.25,
                 fallback: Container(
                   padding: EdgeInsets.all(16 * scale),
                   decoration: BoxDecoration(
@@ -206,9 +220,8 @@ class HomePage extends StatelessWidget {
                           children: [
                             AppText(
                               'مشوارك أسهل',
-                              style: heading(
-                                28 * scale,
-                              ).copyWith(color: Colors.white),
+                              style: heading(28 * scale)
+                                  .copyWith(color: Colors.white),
                             ),
                             const SizedBox(height: 6),
                             Container(

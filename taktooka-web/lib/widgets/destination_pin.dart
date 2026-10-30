@@ -6,10 +6,10 @@ class DestinationPin extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    tween: Tween(end: moving ? 8.0 : 0.0),
+    tween: Tween(end: moving ? 4.0 : 0.0),
     duration: MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : const Duration(milliseconds: 240),
+        : const Duration(milliseconds: 130),
     curve: Curves.easeOutCubic,
     builder: (context, lift, child) => CustomPaint(
       size: const Size(48, 72),

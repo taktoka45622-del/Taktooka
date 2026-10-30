@@ -11,7 +11,7 @@ const ink = Color(0xff111111),
 String money(dynamic value) =>
     '${NumberFormat('#,##0', 'en').format(num.tryParse('$value') ?? 0)} ${uiText('د.ع')}';
 double uiScale(BuildContext context) =>
-    (MediaQuery.sizeOf(context).width / 390).clamp(.85, 1.3);
+    (MediaQuery.sizeOf(context).width / 390).clamp(.85, 1.15);
 TextStyle heading(double size) => TextStyle(
   fontSize: size,
   fontWeight: FontWeight.w900,

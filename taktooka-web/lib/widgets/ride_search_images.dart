@@ -1,9 +1,8 @@
+import 'package:taktooka/widgets/app_notice.dart';
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
-
-import 'package:taktooka/core/gender_copy.dart';
 
 class RideSearchImages extends StatefulWidget {
   final List<String> assets;
@@ -29,9 +28,7 @@ class _RideSearchImagesState extends State<RideSearchImages>
   void _queueAudio(Future<void> Function() action) {
     _audioQueue = _audioQueue.then((_) => action()).catchError((Object error) {
       if (mounted && !_closing) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: AppText('تعذّر تشغيل الصوت')));
+        showAppNotice(context, 'تعذّر تشغيل الصوت');
       }
     });
   }
@@ -45,7 +42,9 @@ class _RideSearchImagesState extends State<RideSearchImages>
       await _player.setSource(AssetSource('audio/tuktuk_horn.mp3'));
     });
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _foreground && widget.assets.length > 1 &&
+      if (mounted &&
+          _foreground &&
+          widget.assets.length > 1 &&
           !MediaQuery.disableAnimationsOf(context)) {
         setState(() => _index = (_index + 1) % widget.assets.length);
       }

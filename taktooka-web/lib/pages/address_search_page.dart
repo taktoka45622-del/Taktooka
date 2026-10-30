@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'dart:async';
 
@@ -10,8 +11,11 @@ import 'package:taktooka/core/gender_copy.dart';
 import 'package:taktooka/core/place_distance.dart';
 import 'package:taktooka/models/address_choice.dart';
 import 'package:taktooka/services/place_search.dart';
+import 'package:taktooka/services/iraq_places.dart';
 import 'package:taktooka/pages/favorite_place_picker_page.dart';
 import 'package:taktooka/services/backend.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:taktooka/core/location_fix_quality.dart';
 
 class AddressSearch extends StatefulWidget {
   final Backend b;
@@ -31,6 +35,9 @@ class _AddressSearchState extends State<AddressSearch> {
   final search = TextEditingController();
   List<AddressChoice> results = [];
   bool busy = false;
+  Position? _searchFix;
+  bool _locating = true;
+  String? _locationError;
   String? error;
   int sequence = 0;
   Timer? _debounce;
@@ -50,13 +57,40 @@ class _AddressSearchState extends State<AddressSearch> {
   void initState() {
     super.initState();
     unawaited(loadFavorites());
+    if (!widget.savedOnly)
+      unawaited(IraqPlaces.shared.warmUp().catchError((Object _) {}));
+    if (!widget.savedOnly)
+      unawaited(prepareSearchLocation());
+    else
+      _locating = false;
+  }
+
+  Future<void> prepareSearchLocation() async {
+    setState(() {
+      _locating = true;
+      _locationError = null;
+    });
+    try {
+      final fix = _searchFix != null && _usableSearchFix(_searchFix!)
+          ? _searchFix!
+          : await widget.b.locate();
+      if (!mounted) return;
+      setState(() {
+        _searchFix = fix;
+        _locating = false;
+      });
+      if (search.text.trim().length >= 2) unawaited(find());
+    } catch (e) {
+      if (mounted)
+        setState(() {
+          _locating = false;
+          _locationError = readable(e);
+        });
+    }
   }
 
   void report(Object e) {
-    if (mounted)
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: AppText(readable(e))));
+    if (mounted) showAppNotice(context, readable(e));
   }
 
   Future<void> loadFavorites() async {
@@ -185,12 +219,25 @@ class _AddressSearchState extends State<AddressSearch> {
     return choices.take(6).toList();
   }
 
+  bool _usableSearchFix(Position fix) => LocationFixQuality.usable(
+    latitude: fix.latitude,
+    longitude: fix.longitude,
+    accuracy: fix.accuracy,
+    timestamp: fix.timestamp,
+    accuracyLimit: 100,
+    ageLimit: const Duration(minutes: 2),
+  );
+
   void searchChanged(String value) {
     _debounce?.cancel();
     sequence++;
-    final saved = _places.cached(value, searchOrigin);
+    final latest = widget.b.knownPosition;
+    if (latest != null && _usableSearchFix(latest)) _searchFix = latest;
+    final current = _searchFix;
+    final usable = current != null && _usableSearchFix(current);
+    final saved = !usable ? null : _places.cached(value, searchOrigin);
     final query = PlaceSearch.normalize(value);
-    final retained = query.length < 2
+    final retained = !usable || query.length < 2
         ? <AddressChoice>[]
         : results
               .where((r) => PlaceSearch.normalize(r.label).contains(query))
@@ -217,15 +264,24 @@ class _AddressSearchState extends State<AddressSearch> {
     _debounce?.cancel();
     final text = search.text.trim();
     if (text.length < 2) return;
+    if (_searchFix == null) {
+      if (!_locating) unawaited(prepareSearchLocation());
+      return;
+    }
     final request = ++sequence;
     setState(() {
       busy = true;
       error = null;
     });
     try {
+      final fix = _searchFix != null && _usableSearchFix(_searchFix!)
+          ? _searchFix!
+          : await widget.b.locate();
+      if (!mounted || request != sequence) return;
+      _searchFix = fix;
       final choices = await _places.find(
         text,
-        LatLng(widget.b.pickupLat, widget.b.pickupLng),
+        LatLng(fix.latitude, fix.longitude),
       );
       if (!mounted || request != sequence) return;
       final merged = localSuggestions(text);
@@ -244,11 +300,13 @@ class _AddressSearchState extends State<AddressSearch> {
           error =
               'ما لقينا نتيجة؛ جرّب اسم المنطقة ويا المكان أو حدده بالخريطة';
       });
-    } catch (_) {
+    } catch (e) {
       if (mounted && request == sequence) {
         setState(
           () => error = results.isEmpty
-              ? 'تعذّر البحث حاليًا؛ أعد المحاولة أو حدد المكان بالخريطة'
+              ? e is LocationAccessException
+                    ? readable(e)
+                    : 'تعذّر البحث حاليًا؛ أعد المحاولة أو حدد المكان بالخريطة'
               : null,
         );
       }
@@ -257,17 +315,16 @@ class _AddressSearchState extends State<AddressSearch> {
     }
   }
 
-  LatLng get searchOrigin => LatLng(widget.b.pickupLat, widget.b.pickupLng);
+  LatLng get searchOrigin => _searchFix == null
+      ? LatLng(widget.b.pickupLat, widget.b.pickupLng)
+      : LatLng(_searchFix!.latitude, _searchFix!.longitude);
 
   String distanceText(LatLng point) {
-    final fix = widget.b.knownPosition;
-    final origin = fix == null
-        ? searchOrigin
-        : LatLng(fix.latitude, fix.longitude);
+    final fix = _searchFix;
+    if (fix == null) return '';
+    final origin = LatLng(fix.latitude, fix.longitude);
     final distance = const Distance().as(LengthUnit.Meter, origin, point);
-    final reference = fix == null
-        ? 'عن نقطة الانطلاق'
-        : DateTime.now().difference(fix.timestamp).inMinutes >= 2
+    final reference = DateTime.now().difference(fix.timestamp).inMinutes >= 2
         ? 'عن موقعك الأخير'
         : 'عنك';
     return 'يبعد $reference تقريبًا ${formatPlaceDistance(distance)} · مسافة مباشرة';
@@ -365,6 +422,12 @@ class _AddressSearchState extends State<AddressSearch> {
         ),
     ];
     final searchItems = <Widget>[
+      if (_locating) const LinearProgressIndicator(),
+      if (_locationError != null)
+        TextButton(
+          onPressed: prepareSearchLocation,
+          child: AppText(_locationError!),
+        ),
       AppText(
         widget.title,
         style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),

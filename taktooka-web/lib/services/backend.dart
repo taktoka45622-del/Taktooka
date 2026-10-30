@@ -1,21 +1,27 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:taktooka/core/trip_navigation.dart';
+import 'package:taktooka/services/offline_roads.dart';
+import 'package:taktooka/services/device_booking.dart';
+import 'package:taktooka/core/app_preferences.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:taktooka/core/gender_copy.dart';
+export 'package:taktooka/core/backend_config.dart';
 import 'package:taktooka/services/location_disclosure.dart';
+import 'package:taktooka/services/booking_pricing.dart';
 import 'package:taktooka/services/refresh_gate.dart';
-
-const supabaseUrl = 'https://typbkzwbrmkrfkfxjrgi.supabase.co';
-const publishableKey = 'sb_publishable_Oto-5IRPHgWceHq_uzrsiw_JBBZbAOT';
+import 'package:taktooka/core/location_fix_quality.dart';
 
 enum LocationAccessIssue {
   serviceDisabled,
   permissionDenied,
   permissionDeniedForever,
+  accuracyInsufficient,
 }
 
 class LocationAccessException implements Exception {
@@ -26,6 +32,7 @@ class LocationAccessException implements Exception {
     LocationAccessIssue.serviceDisabled => 'شغّل الموقع حتى نحدد نقطة الانطلاق',
     LocationAccessIssue.permissionDenied =>
       'اسمح لتكتوكة باستخدام موقعك حتى نحدد نقطة الانطلاق',
+    LocationAccessIssue.accuracyInsufficient => 'الموقع الدقيق بعده مو جاهز؛ فعّل الموقع الدقيق وقرّب من مكان مفتوح ثم أعد المحاولة',
     LocationAccessIssue.permissionDeniedForever =>
       'فعّل إذن الموقع لتكتوكة من إعدادات التطبيق',
   };
@@ -58,7 +65,13 @@ class Backend extends ChangeNotifier {
 
   void setForeground(bool foreground) {
     _foreground = foreground;
-    if (foreground) unawaited(refresh());
+    if (foreground) {
+      unawaited(refresh());
+      unawaited(warmRiderLocation());
+      if (tracking) unawaited(_heartbeat());
+    } else {
+      stopRiderWarmup();
+    }
   }
 
   void _scheduleRefresh() {
@@ -120,6 +133,15 @@ class Backend extends ChangeNotifier {
   }
 
   Future<void> _heartbeat() async {
+    if (tracking &&
+        gps == null &&
+        !_restartingGps &&
+        DateTime.now().isAfter(_gpsRetryAt)) {
+      _gpsRetryAt = DateTime.now().add(const Duration(seconds: 3));
+      try {
+        await _listenCaptainGps();
+      } catch (_) {}
+    }
     if (_heartbeatRunning ||
         !tracking ||
         position == null ||
@@ -132,7 +154,8 @@ class Backend extends ChangeNotifier {
               .difference(position!.timestamp.toUtc())
               .inSeconds >=
           25) {
-        position = await locate();
+        final fix = await locate(fresh: true);
+        acceptCaptainFix(fix);
       }
       if (tracking && !_disposed) {
         await presence(true);
@@ -150,6 +173,7 @@ class Backend extends ChangeNotifier {
   void _notifyIfChanged() {
     final value = [
       profile,
+      commerce,
       rides,
       activeRide,
       contact,
@@ -161,6 +185,9 @@ class Backend extends ChangeNotifier {
       error,
       tracking,
       city,
+      position?.latitude,
+      position?.longitude,
+      position?.timestamp,
     ];
     if (!sameSnapshot(_publishedSnapshot, value)) {
       _publishedSnapshot = value;
@@ -196,9 +223,9 @@ class Backend extends ChangeNotifier {
       ? DateTime.now().toUtc()
       : _serverAnchor!.add(_serverElapsed.elapsed);
   int offerSeconds(Json offer) =>
-      (DateTime.parse(
-                offer['offer_expires_at'],
-              ).difference(serverNow).inMilliseconds /
+      (DateTime.parse(offer['offer_expires_at'])
+                  .difference(serverNow)
+                  .inMilliseconds /
               1000)
           .ceil()
           .clamp(0, 30);
@@ -234,6 +261,63 @@ class Backend extends ChangeNotifier {
     } catch (_) {}
   }
 
+  Timer? _nearbyTimer;
+  bool _nearbyReading = false;
+  int _nearbyWatchers = 0;
+  void watchNearby() {
+    _nearbyWatchers++;
+    _nearbyTimer ??= Timer.periodic(const Duration(seconds: 3), (_) {
+      unawaited(refreshNearby());
+    });
+    unawaited(refreshNearby());
+  }
+
+  void unwatchNearby() {
+    if (_nearbyWatchers > 0) _nearbyWatchers--;
+    if (_nearbyWatchers == 0) {
+      _nearbyTimer?.cancel();
+      _nearbyTimer = null;
+    }
+  }
+
+  Future<void> refreshNearby() async {
+    if (_disposed ||
+        !_foreground ||
+        !loggedIn ||
+        captain ||
+        activeRide != null ||
+        _nearbyReading ||
+        _nearbyWatchers == 0)
+      return;
+    _nearbyReading = true;
+    final uid = db.auth.currentUser?.id;
+    try {
+      final result = await action('nearby', {
+        'lat': pickupLat,
+        'lng': pickupLng,
+      }).timeout(const Duration(seconds: 5));
+      if (_disposed ||
+          !_foreground ||
+          db.auth.currentUser?.id != uid ||
+          activeRide != null ||
+          captain)
+        return;
+      nearby = rows(result);
+      _notifyIfChanged();
+    } catch (_) {
+      final fresh = nearby.where((p) {
+        final at = DateTime.tryParse('${p['location_at']}');
+        return at != null && serverNow.difference(at).inSeconds < 30;
+      }).toList();
+      if (fresh.length != nearby.length) {
+        nearby = fresh;
+        _notifyIfChanged();
+      }
+    } finally {
+      _nearbyReading = false;
+    }
+  }
+
   Json? activeRide;
   Json? contact;
   List<Json> rides = [], requests = [], nearby = [];
@@ -260,12 +344,16 @@ class Backend extends ChangeNotifier {
   bool _presenceSending = false;
   Future<void> _presenceQueue = Future<void>.value();
   bool get loggedIn => db.auth.currentSession != null;
+  Json commerce = {};
+  bool get restaurantOwner => commerce['restaurant'] is Map;
+  bool get commissionPlan => commerce['plan'] == 'commission';
+  bool get canReceiveOrders =>
+      (commissionPlan || subscribed) && commerce['debt_blocked'] != true;
   bool get captain => profile?['captain'] == true;
   bool get admin => profile?['admin'] == true;
   bool get subscribed =>
-      DateTime.tryParse(
-        profile?['expires_at'] ?? '',
-      )?.isAfter(DateTime.now()) ??
+      DateTime.tryParse(profile?['expires_at'] ?? '')
+          ?.isAfter(DateTime.now()) ??
       false;
 
   Future<dynamic> action(String action, [Json data = const {}]) async => db
@@ -353,27 +441,22 @@ class Backend extends ChangeNotifier {
       (value as List).map((e) => Json.from(e as Map)).toList();
 
   Future<void> start() async {
+    unawaited(warmRiderLocation());
+    if (loggedIn) unawaited(appPreferences.rememberAccountUse());
     authListener = db.auth.onAuthStateChange.listen(
       (state) {
         if (state.event == AuthChangeEvent.signedOut) {
-          _authEpoch++;
-          profile = null;
-          accountGender.value = 'male';
-          extras = {};
-          dispatchInfo = {};
-          failedRide = activeRide = contact = null;
-          rides = [];
-          requests = [];
-          nearby = [];
-          _extrasAt = DateTime(2000);
-          _bindRealtime();
+          _clearSignedOutState();
           unawaited(stopTracking());
-          _notifyIfChanged();
         } else if (state.event == AuthChangeEvent.signedIn) {
+          unawaited(appPreferences.rememberAccountUse());
           _authEpoch++;
           _extrasAt = DateTime(2000);
           _bindRealtime();
           unawaited(refresh());
+          unawaited(
+            BookingPricing.syncOnce(() => db.rpc('tkt_booking_pricing')),
+          );
         }
       },
       onError: (Object e) {
@@ -389,6 +472,8 @@ class Backend extends ChangeNotifier {
       }
     });
     await refresh();
+    if (loggedIn)
+      unawaited(BookingPricing.syncOnce(() => db.rpc('tkt_booking_pricing')));
     await restoreTracking();
   }
 
@@ -431,11 +516,18 @@ class Backend extends ChangeNotifier {
         _read(action('me')),
         _read(action('snapshot')),
         _read(dispatch('snapshot')),
+        _read(db.rpc('tkt_commerce', params: {'p_action': 'me', 'p_data': {}})),
       ]);
       if (!current()) return;
       final oldCaptain = captain;
       if (primary[0].$2 != null) throw primary[0].$2!;
       profile = Json.from(primary[0].$1 as Map);
+      commerce = primary[3].$1 is Map ? Json.from(primary[3].$1 as Map) : {};
+      if (captain && tracking) {
+        stopRiderWarmup();
+      } else {
+        unawaited(warmRiderLocation());
+      }
       accountGender.value = profile?['gender'] == 'female' ? 'female' : 'male';
       _bindRealtime();
       if (profile!['blocked'] == true) {
@@ -480,7 +572,9 @@ class Backend extends ChangeNotifier {
           ? rides.first
           : null;
       if (tracking &&
-          ((!subscribed && activeRide == null) ||
+          ((!canReceiveOrders &&
+                  activeRide == null &&
+                  commerce['food_active'] != true) ||
               !captain ||
               oldCaptain != captain)) {
         await stopTracking();
@@ -499,20 +593,53 @@ class Backend extends ChangeNotifier {
         activeRide != null && activeRide!['status'] != 'pending'
             ? action('contact', {'ride_id': activeRide!['id']})
             : Future.value(null),
-        !captain && activeRide == null
-            ? action('nearby', {'lat': pickupLat, 'lng': pickupLng})
-            : Future.value([]),
+        Future.value(<dynamic>[]),
         extrasRequest,
+        activeRide != null && activeRide!['status'] != 'pending'
+            ? _read(
+                db
+                    .rpc(
+                      'tkt_navigation',
+                      params: {
+                        'p_action': 'read',
+                        'p_data': {
+                          'ride_id': activeRide!['id'],
+                          if (_sharedNavigation?['ride_id'] ==
+                                  activeRide!['id'] &&
+                              _sharedNavigation?['phase'] ==
+                                  TripNavigation.phase(activeRide!))
+                            'known_updated_at':
+                                _sharedNavigation?['updated_at'],
+                        },
+                      },
+                    )
+                    .timeout(const Duration(seconds: 5)),
+              )
+            : Future.value((<String, dynamic>{}, null)),
       ]);
       if (!current()) return;
       requests = rows(details[0]);
       if (requests.isNotEmpty) _anchor(requests.first['server_now']);
       contact = details[1] is Map ? Json.from(details[1] as Map) : null;
+      final navigation = details[4] as (dynamic, Object?);
+      if (navigation.$2 == null && navigation.$1 is Map && activeRide != null) {
+        final result = Json.from(navigation.$1 as Map);
+        final value = result['unchanged'] == true ? _sharedNavigation : result;
+        if (value != null &&
+            value['ride_id'] == activeRide!['id'] &&
+            value['phase'] == TripNavigation.phase(activeRide!)) {
+          _sharedNavigation = value;
+          activeRide = {...activeRide!, 'navigation': value};
+        } else {
+          _sharedNavigation = null;
+        }
+      }
+      _syncNavigation();
       if (activeRide?['status'] == 'in_progress') {
         contact?.remove('phone');
         if (!captain) unawaited(refreshEmergencyLocation(activeRide!['id']));
       }
-      nearby = rows(details[2]);
+      if (captain || activeRide != null) nearby = [];
       final extraResult = details[3] as (dynamic, Object?);
       if (extraResult.$2 == null) {
         extras = featuresEnabled ? Json.from(extraResult.$1 as Map) : {};
@@ -528,6 +655,162 @@ class Backend extends ChangeNotifier {
           : (tracking || activeRide != null ? 1 : 10);
       _nextPoll = DateTime.now().add(Duration(seconds: seconds));
       if (current()) _notifyIfChanged();
+    }
+  }
+
+  StreamSubscription<Position>? _riderGps;
+  Future<void>? _warmingRider;
+  Future<Position>? _preciseRequest;
+  final _riderFixes = StreamController<Position>.broadcast();
+  Stream<Position> get riderLocationFixes => _riderFixes.stream;
+  int _riderGpsEpoch = 0;
+  bool _goodFix(Position fix) => LocationFixQuality.usable(
+    latitude: fix.latitude,
+    longitude: fix.longitude,
+    accuracy: fix.accuracy,
+    timestamp: fix.timestamp,
+  );
+  bool _displayFix(Position fix) => LocationFixQuality.usable(
+    latitude: fix.latitude,
+    longitude: fix.longitude,
+    accuracy: fix.accuracy,
+    timestamp: fix.timestamp,
+    accuracyLimit: 50,
+    ageLimit: const Duration(seconds: 30),
+  );
+  Future<void> warmRiderLocation() {
+    if (_disposed || !_foreground || (captain && tracking) || _riderGps != null)
+      return Future.value();
+    return _warmingRider ??= _warmRider().whenComplete(() {
+      _warmingRider = null;
+    });
+  }
+
+  Future<void> _warmRider() async {
+    final epoch = _riderGpsEpoch;
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission != LocationPermission.whileInUse &&
+          permission != LocationPermission.always)
+        return;
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      if (_disposed ||
+          !_foreground ||
+          (captain && tracking) ||
+          epoch != _riderGpsEpoch)
+        return;
+      _riderGps =
+          Geolocator.getPositionStream(
+            locationSettings: defaultTargetPlatform == TargetPlatform.android
+                ? AndroidSettings(
+                    accuracy: LocationAccuracy.bestForNavigation,
+                    distanceFilter: 0,
+                    intervalDuration: const Duration(seconds: 1),
+                  )
+                : defaultTargetPlatform == TargetPlatform.iOS
+                ? AppleSettings(
+                    accuracy: LocationAccuracy.bestForNavigation,
+                    distanceFilter: 0,
+                    allowBackgroundLocationUpdates: false,
+                  )
+                : const LocationSettings(
+                    accuracy: LocationAccuracy.bestForNavigation,
+                    distanceFilter: 0,
+                  ),
+          ).listen(
+            (fix) {
+              if (_disposed ||
+                  !_foreground ||
+                  (captain && tracking) ||
+                  epoch != _riderGpsEpoch ||
+                  !_displayFix(fix))
+                return;
+              if (captain) {
+                acceptCaptainFix(fix);
+              } else {
+                _lastRiderPosition = fix;
+                _riderFixes.add(fix);
+              }
+            },
+            onError: (Object _) {
+              _riderGps = null;
+            },
+            cancelOnError: true,
+          );
+      unawaited(
+        Geolocator.getLastKnownPosition()
+            .timeout(const Duration(seconds: 2))
+            .then<void>((fix) {
+              if (fix != null &&
+                  !_disposed &&
+                  _foreground &&
+                  epoch == _riderGpsEpoch &&
+                  _displayFix(fix)) {
+                if (_lastRiderPosition == null ||
+                    fix.timestamp.isAfter(_lastRiderPosition!.timestamp)) {
+                  if (captain) {
+                    acceptCaptainFix(fix);
+                  } else {
+                    _lastRiderPosition = fix;
+                    _riderFixes.add(fix);
+                  }
+                }
+              }
+            }, onError: (Object _) {}),
+      );
+    } catch (_) {}
+  }
+
+  void stopRiderWarmup() {
+    _riderGpsEpoch++;
+    final subscription = _riderGps;
+    _riderGps = null;
+    if (subscription != null) unawaited(subscription.cancel());
+  }
+
+  Future<Position> locatePrecise() {
+    return _preciseRequest ??= _locatePrecise().whenComplete(() {
+      _preciseRequest = null;
+    });
+  }
+
+  Future<Position> _locatePrecise() async {
+    if (captain) {
+      final fix = position != null && _goodFix(position!)
+          ? position!
+          : await locate(fresh: true);
+      if (_goodFix(fix)) return fix;
+      throw const LocationAccessException(
+        LocationAccessIssue.accuracyInsufficient,
+      );
+    }
+    final permission = await requestLocationAccess();
+    if (permission == LocationPermission.deniedForever)
+      throw const LocationAccessException(
+        LocationAccessIssue.permissionDeniedForever,
+      );
+    if (permission == LocationPermission.denied)
+      throw const LocationAccessException(LocationAccessIssue.permissionDenied);
+    if (!await Geolocator.isLocationServiceEnabled())
+      throw const LocationAccessException(LocationAccessIssue.serviceDisabled);
+    if (!kIsWeb &&
+        await Geolocator.getLocationAccuracy() ==
+            LocationAccuracyStatus.reduced)
+      throw const LocationAccessException(
+        LocationAccessIssue.accuracyInsufficient,
+      );
+    await warmRiderLocation();
+    if (_riderGps == null && _foreground) await warmRiderLocation();
+    final cached = _lastRiderPosition;
+    if (cached != null && _goodFix(cached)) return cached;
+    try {
+      return await _riderFixes.stream
+          .firstWhere(_goodFix)
+          .timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      throw const LocationAccessException(
+        LocationAccessIssue.accuracyInsufficient,
+      );
     }
   }
 
@@ -582,26 +865,30 @@ class Backend extends ChangeNotifier {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw const LocationAccessException(LocationAccessIssue.serviceDisabled);
     }
-    final cached =
-        _lastRiderPosition ??
-        (kIsWeb ? null : await Geolocator.getLastKnownPosition());
+    final cached = knownPosition ?? await Geolocator.getLastKnownPosition();
     if (!fresh &&
         cached != null &&
-        DateTime.now().difference(cached.timestamp).inSeconds <= 15 &&
-        cached.accuracy <= 40) {
+        (captain ? _goodFix(cached) : _displayFix(cached))) {
       _lastRiderPosition = cached;
       return cached;
     }
     if (_locationRequest != null) return _locationRequest!;
     final request = Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
+      locationSettings: LocationSettings(
+        accuracy: captain
+            ? LocationAccuracy.bestForNavigation
+            : LocationAccuracy.high,
         timeLimit: Duration(seconds: 15),
       ),
     );
     _locationRequest = request;
     try {
       final result = await request;
+      if (captain && !_goodFix(result)) {
+        throw const LocationAccessException(
+          LocationAccessIssue.accuracyInsufficient,
+        );
+      }
       _lastRiderPosition = result;
       return result;
     } finally {
@@ -609,19 +896,90 @@ class Backend extends ChangeNotifier {
     }
   }
 
+  Json? _sharedNavigation;
+  late final TripNavigation _navigation = TripNavigation(
+    load: (from, to) async {
+      if (!kIsWeb) {
+        try {
+          return await OfflineRoads.shared
+              .route(from.latitude, from.longitude, to.latitude, to.longitude)
+              .timeout(const Duration(seconds: 3));
+        } catch (_) {}
+      }
+      return DeviceBooking.shared.route(from, to);
+    },
+    publish: (data) async {
+      await db
+          .rpc(
+            'tkt_navigation',
+            params: {'p_action': 'publish', 'p_data': data},
+          )
+          .timeout(const Duration(seconds: 8));
+      if (!_disposed &&
+          activeRide?['id'] == data['ride_id'] &&
+          TripNavigation.phase(activeRide!) == data['phase']) {
+        activeRide = {...activeRide!, 'navigation': data};
+        _notifyIfChanged();
+      }
+    },
+  );
+
+  void _syncNavigation() {
+    final ride = activeRide;
+    final fix = position;
+    if (_disposed ||
+        !captain ||
+        !tracking ||
+        ride == null ||
+        fix == null ||
+        !_goodFix(fix))
+      return;
+    final phase = TripNavigation.phase(ride);
+    unawaited(
+      _navigation.update(
+        Json.from(ride),
+        LatLng(fix.latitude, fix.longitude),
+        fix.timestamp,
+        isCurrent: () =>
+            !_disposed &&
+            tracking &&
+            activeRide?['id'] == ride['id'] &&
+            TripNavigation.phase(activeRide!) == phase,
+      ),
+    );
+  }
+
   void _locationSendRecovered() {
     if (error == _locationUploadError) error = null;
     _locationUploadError = null;
   }
 
+  bool acceptCaptainFix(Position fix) {
+    if (_disposed || !_goodFix(fix)) return false;
+    final previous = position;
+    if (previous != null && !fix.timestamp.isAfter(previous.timestamp))
+      return false;
+    position = fix;
+    _lastRiderPosition = fix;
+    _notifyIfChanged();
+    _syncNavigation();
+    return true;
+  }
+
+  bool _presenceAgain = false;
   Future<void> presence(bool online) {
     if (online && (position == null || !tracking)) return Future<void>.value();
-    if (online && _presenceSending) return _presenceQueue;
-    final point = position;
+    if (online && _presenceSending) {
+      _presenceAgain = true;
+      return _presenceQueue;
+    }
     _presenceSending = true;
     final next = _presenceQueue.catchError((Object _) {}).then((_) async {
-      if (online && !tracking) return;
       try {
+        _presenceAgain = false;
+        if (online && (!tracking || position == null || !_goodFix(position!)))
+          return;
+        final point = position;
         await db.functions
             .invoke(
               'taktooka-dispatch',
@@ -638,6 +996,21 @@ class Backend extends ChangeNotifier {
         lastPresence = DateTime.now();
       } finally {
         _presenceSending = false;
+        if (online && tracking && _presenceAgain && !_disposed) {
+          _presenceAgain = false;
+          unawaited(
+            presence(true).then(
+              (_) {
+                _locationSendRecovered();
+              },
+              onError: (Object e) {
+                _locationUploadError = readable(e);
+                error = _locationUploadError;
+                _notifyIfChanged();
+              },
+            ),
+          );
+        }
       }
     });
     _presenceQueue = next;
@@ -646,7 +1019,11 @@ class Backend extends ChangeNotifier {
 
   bool _restoringTracking = false;
   Future<void> restoreTracking() async {
-    if (_restoringTracking || tracking || !captain || !subscribed || !loggedIn)
+    if (_restoringTracking ||
+        tracking ||
+        !captain ||
+        (!canReceiveOrders && commerce['food_active'] != true) ||
+        !loggedIn)
       return;
     _restoringTracking = true;
     try {
@@ -664,72 +1041,101 @@ class Backend extends ChangeNotifier {
     }
   }
 
-  Future<void> startTracking() async {
-    if (!subscribed) throw Exception('جدّد اشتراكك أولًا');
+  Future<void>? _startingTracking;
+  Future<void> startTracking() => _startingTracking ??= _startTracking()
+      .whenComplete(() => _startingTracking = null);
+
+  Future<void> _startTracking() async {
+    if (tracking) return;
+    if (!canReceiveOrders && commerce['food_active'] != true)
+      throw Exception('جدّد حسابك عبر الدعم أولًا');
     if (!await locationDisclosure(captain: true)) return;
+    await requestLocationAccess(captain: true, background: true);
     if ((profile?['name'] ?? '').isEmpty || (profile?['phone'] ?? '').isEmpty)
       throw Exception('أكمل اسمك ورقم هاتفك أولًا');
-    position = await locate();
+    final fix = await locatePrecise();
+    if (_disposed || !loggedIn || !captain) return;
+    position = fix;
+    final warming = _riderGps;
+    stopRiderWarmup();
+    if (warming != null) await warming.cancel();
     tracking = true;
+    _notifyIfChanged();
     try {
+      await _listenCaptainGps();
       await presence(true);
     } catch (_) {
       tracking = false;
+      await gps?.cancel();
+      gps = null;
+      _notifyIfChanged();
+      unawaited(warmRiderLocation());
       rethrow;
     }
     final prefs = await SharedPreferences.getInstance();
     final uid = db.auth.currentUser?.id;
     if (uid != null) await prefs.setBool('receive_orders_$uid', true);
-    await gps?.cancel();
-    gps =
-        Geolocator.getPositionStream(
-          locationSettings: kIsWeb
-              ? const LocationSettings(
-                  accuracy: LocationAccuracy.high,
-                  distanceFilter: 0,
-                )
-              : defaultTargetPlatform == TargetPlatform.android
-              ? AndroidSettings(
-                  accuracy: LocationAccuracy.high,
-                  distanceFilter: 0,
-                  intervalDuration: const Duration(seconds: 1),
-                  foregroundNotificationConfig:
-                      const ForegroundNotificationConfig(
-                        notificationTitle: 'تكتوكة — مشاركة موقع الكابتن',
-                        notificationText:
-                            'موقعك يُشارك لاستقبال الرحلات وتتبع الرحلة الحالية',
-                        enableWakeLock: true,
-                      ),
-                )
-              : AppleSettings(
-                  accuracy: LocationAccuracy.high,
-                  distanceFilter: 0,
-                  activityType: ActivityType.automotiveNavigation,
-                  pauseLocationUpdatesAutomatically: false,
-                  allowBackgroundLocationUpdates: true,
-                  showBackgroundLocationIndicator: true,
-                ),
-        ).listen(
-          (p) async {
-            position = p;
-            if (DateTime.now().difference(lastPresence).inSeconds < 1) return;
-            try {
-              await presence(true);
-              _locationSendRecovered();
-              _notifyIfChanged();
-            } catch (e) {
+    unawaited(refresh());
+  }
+
+  DateTime _gpsRetryAt = DateTime(2000);
+  bool _restartingGps = false;
+  Future<void> _listenCaptainGps() async {
+    if (!tracking || _disposed || _restartingGps) return;
+    _restartingGps = true;
+    try {
+      await gps?.cancel();
+      gps =
+          Geolocator.getPositionStream(
+            locationSettings: defaultTargetPlatform == TargetPlatform.android
+                ? AndroidSettings(
+                    accuracy: LocationAccuracy.bestForNavigation,
+                    distanceFilter: 0,
+                    intervalDuration: const Duration(seconds: 1),
+                    foregroundNotificationConfig:
+                        const ForegroundNotificationConfig(
+                          notificationTitle: 'تكتوكة — مشاركة موقع الكابتن',
+                          notificationText: 'موقعك يُشارك لاستقبال الرحلات وتتبع الرحلة الحالية',
+                          enableWakeLock: true,
+                          setOngoing: true,
+                        ),
+                  )
+                : AppleSettings(
+                    accuracy: LocationAccuracy.bestForNavigation,
+                    distanceFilter: 0,
+                    activityType: ActivityType.automotiveNavigation,
+                    pauseLocationUpdatesAutomatically: false,
+                    allowBackgroundLocationUpdates: true,
+                    showBackgroundLocationIndicator: true,
+                  ),
+          ).listen(
+            (p) async {
+              if (!tracking || !acceptCaptainFix(p)) return;
+              if (!_presenceSending &&
+                  DateTime.now().difference(lastPresence).inSeconds < 1)
+                return;
+              try {
+                await presence(true);
+                _locationSendRecovered();
+                _notifyIfChanged();
+              } catch (e) {
+                _locationUploadError = readable(e);
+                error = _locationUploadError;
+                _notify();
+              }
+            },
+            onError: (Object e) {
+              gps = null;
+              _gpsRetryAt = DateTime.now().add(const Duration(seconds: 2));
               _locationUploadError = readable(e);
               error = _locationUploadError;
-              _notify();
-            }
-          },
-          onError: (Object e) {
-            error = readable(e);
-            unawaited(stopTracking());
-            _notify();
-          },
-        );
-    await refresh();
+              _notifyIfChanged();
+            },
+            cancelOnError: true,
+          );
+    } finally {
+      _restartingGps = false;
+    }
   }
 
   Future<void> stopTracking() async {
@@ -739,6 +1145,8 @@ class Backend extends ChangeNotifier {
       await prefs.setBool('receive_orders_$uid', false);
     }
     tracking = false;
+    _presenceAgain = false;
+    _notifyIfChanged();
     await gps?.cancel();
     gps = null;
     if (loggedIn && captain) {
@@ -748,12 +1156,60 @@ class Backend extends ChangeNotifier {
     }
     requests = [];
     _notify();
+    unawaited(warmRiderLocation());
   }
 
-  Future<void> signOut() async {
-    await beforeSignOut?.call();
-    await stopTracking();
-    await db.auth.signOut();
+  Future<void>? _signingOut;
+
+  Future<void> signOut() => _signingOut ??= _performSignOut().whenComplete(() {
+    _signingOut = null;
+  });
+
+  Future<void> _logoutCleanup(Future<void> Function() action) async {
+    try {
+      await action().timeout(const Duration(seconds: 2));
+    } catch (_) {}
+  }
+
+  void _clearSignedOutState() {
+    stopRiderWarmup();
+    _lastRiderPosition = null;
+    _authEpoch++;
+    profile = null;
+    commerce = {};
+    _sharedNavigation = null;
+    accountGender.value = 'male';
+    extras = {};
+    dispatchInfo = {};
+    failedRide = activeRide = contact = null;
+    rides = [];
+    requests = [];
+    nearby = [];
+    tracking = false;
+    _extrasAt = DateTime(2000);
+    _bindRealtime();
+    _notify();
+  }
+
+  Future<void> _performSignOut() async {
+    final cleanup = beforeSignOut;
+    await Future.wait([
+      if (loggedIn) _logoutCleanup(appPreferences.rememberAccountUse),
+      if (cleanup != null) _logoutCleanup(cleanup),
+      _logoutCleanup(stopTracking),
+    ]);
+    try {
+      await db.auth
+          .signOut(scope: SignOutScope.local)
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {
+      if (db.auth.currentSession != null) rethrow;
+    } finally {
+      if (db.auth.currentSession == null) {
+        _clearSignedOutState();
+        await appPreferences.showOnboardingAfterLogout();
+      }
+    }
   }
 
   void _notify() {
@@ -762,6 +1218,9 @@ class Backend extends ChangeNotifier {
 
   @override
   void dispose() {
+    stopRiderWarmup();
+    _riderFixes.close();
+    _nearbyTimer?.cancel();
     _disposed = true;
     timer?.cancel();
     _eventTimer?.cancel();

@@ -1,4 +1,6 @@
+import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/core/display_format.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,7 +18,8 @@ import 'package:taktooka/models/address_choice.dart';
 import 'package:taktooka/pages/about_page.dart';
 import 'package:taktooka/pages/account_page.dart';
 import 'package:taktooka/pages/address_search_page.dart';
-import 'package:taktooka/pages/captain_registration_page.dart';
+import 'package:taktooka/pages/commerce_page.dart';
+import 'package:taktooka/pages/registration_choice_page.dart';
 import 'package:taktooka/pages/chat_page.dart';
 import 'package:taktooka/pages/city_page.dart';
 import 'package:taktooka/pages/history_page.dart';
@@ -30,6 +33,8 @@ import 'package:taktooka/pages/ride_map_page.dart';
 import 'package:taktooka/pages/settings_page.dart';
 import 'package:taktooka/pages/wallet_page.dart';
 import 'package:taktooka/services/backend.dart';
+import 'package:taktooka/services/offline_roads.dart';
+import 'package:taktooka/services/connection_monitor.dart';
 import 'package:taktooka/services/invite_friends.dart';
 import 'package:taktooka/services/location_disclosure.dart';
 import 'package:taktooka/services/map_handoff.dart';
@@ -100,16 +105,56 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   final _tabBodies = List<Widget?>.filled(4, null);
   int _renderedTab = -1;
   bool busy = false;
+  bool _hadSession = false;
   late final notices = NotificationCenter(backend, openNotice);
+  StreamSubscription<Position>? _mapWarmLocation;
+  bool _foreground = true;
+  Timer? _roadWarmDelay;
+  bool _roadsPrepared = false;
+  void _warmLocalMap(Position fix) =>
+      _prepareMapAt(fix.latitude, fix.longitude);
+
+  void _prepareMapAt(double latitude, double longitude) {
+    if (!mounted || !_foreground) return;
+    if (!_roadsPrepared &&
+        _roadWarmDelay == null &&
+        ModalRoute.of(context)?.isCurrent == true) {
+      _roadWarmDelay = Timer(const Duration(seconds: 1), () {
+        _roadWarmDelay = null;
+        if (!mounted ||
+            !_foreground ||
+            ModalRoute.of(context)?.isCurrent != true)
+          return;
+        _roadsPrepared = true;
+        unawaited(
+          OfflineRoads.shared.warmUp().catchError((Object _) {
+            _roadsPrepared = false;
+          }),
+        );
+      });
+    }
+    unawaited(
+      StreetMapLayer.warmAround(
+        latitude,
+        longitude,
+        active: () => mounted && _foreground,
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     unawaited(StreetMapLayer.warmUp());
+    _mapWarmLocation = backend.riderLocationFixes.listen(_warmLocalMap);
     unawaited(initializeMapHandoff());
+    _hadSession = backend.loggedIn;
+    connectionMonitor.addListener(connectionChanged);
     backend.addListener(changed);
     notices.addListener(changed);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _prepareMapAt(backend.pickupLat, backend.pickupLng);
       unawaited(startWithPermissions());
     });
   }
@@ -126,14 +171,33 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     }
     if (!mounted) return;
     if (locationAllowed)
-      unawaited(backend.locate().then<void>((_) {}, onError: (Object _) {}));
+      unawaited(
+        backend.locate().then<void>(_warmLocalMap, onError: (Object _) {}),
+      );
     unawaited(backend.start());
     await notices.requestStartupPermission();
     if (!mounted) return;
     unawaited(notices.start());
   }
 
+  void connectionChanged() {
+    if (connectionMonitor.status == NetworkStatus.online && backend.loggedIn) {
+      unawaited(backend.refresh(queueIfBusy: false));
+    }
+  }
+
   void changed() {
+    final signedOut = _hadSession && !backend.loggedIn;
+    _hadSession = backend.loggedIn;
+    if (signedOut) {
+      tab = 0;
+      busy = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !backend.loggedIn) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      });
+    }
     if (mounted) setState(() {});
     if (_sharedLocation != null) {
       WidgetsBinding.instance.addPostFrameCallback(
@@ -144,7 +208,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    backend.setForeground(state == AppLifecycleState.resumed);
+    _foreground = state == AppLifecycleState.resumed;
+    backend.setForeground(_foreground);
     notices.setForeground(state == AppLifecycleState.resumed);
   }
 
@@ -154,6 +219,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     mapChannel.setMethodCallHandler(null);
     notices.removeListener(changed);
     notices.dispose();
+    _mapWarmLocation?.cancel();
+    _roadWarmDelay?.cancel();
+    connectionMonitor.removeListener(connectionChanged);
     backend.removeListener(changed);
     backend.dispose();
     super.dispose();
@@ -161,20 +229,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
 
   void toast(String text) {
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        content: AppText(text, textDirection: TextDirection.rtl),
-        action: SnackBarAction(
-          label: 'إغلاق',
-          onPressed: () => messenger.hideCurrentSnackBar(),
-        ),
-      ),
-    );
+    showAppNotice(context, text);
   }
 
   Future<void> run(Future<void> Function() action) async {
@@ -207,6 +262,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     final navigator = Navigator.of(context);
     navigator.popUntil((route) => route.isFirst);
     switch (n['screen']) {
+      case 'food':
+        navigator.push(MaterialPageRoute(builder: (_) => FoodPage(b: backend)));
+        break;
       case 'lines':
         openLines(n['line_id'] as String?);
         break;
@@ -303,20 +361,35 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     return true;
   }
 
-  void book({AddressChoice? favoriteDestination}) {
-    openFeature(
-      context,
-      backend,
-      'مشوار',
-      () => RideMap(
-        backend: backend,
-        busy: busy,
-        run: run,
-        toast: toast,
-        openAccount: editAccount,
-        favoriteDestination: favoriteDestination,
-      ),
-    );
+  bool _bookingOpen = false;
+
+  Future<void> book({AddressChoice? favoriteDestination}) async {
+    if (_bookingOpen) return;
+    _bookingOpen = true;
+    try {
+      await Navigator.of(context).push<void>(
+        PageRouteBuilder<void>(
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (_, __, ___) => Scaffold(
+            appBar: AppBar(title: const BrandTitle(), centerTitle: true),
+            body: AnimatedBuilder(
+              animation: backend,
+              builder: (_, __) => RideMap(
+                backend: backend,
+                busy: busy,
+                run: run,
+                toast: toast,
+                openAccount: editAccount,
+                favoriteDestination: favoriteDestination,
+              ),
+            ),
+          ),
+        ),
+      );
+    } finally {
+      _bookingOpen = false;
+    }
   }
 
   void support() {
@@ -368,9 +441,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   void applyCaptain() {
     if (!requireLogin()) return;
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => CaptainRegistrationPage(backend: backend),
-      ),
+      MaterialPageRoute(builder: (_) => RegistrationChoicePage(b: backend)),
     );
   }
 
@@ -399,7 +470,11 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     return switch (index) {
       0 => HomePage(
         b: backend,
-        book: book,
+        book: backend.commerce['vehicle'] == 'bike'
+            ? () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => FoodPage(b: backend)))
+            : book,
         lines: openLines,
         history: () => setState(() => tab = 1),
         offers: () => setState(() => tab = 2),
@@ -448,9 +523,10 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       _renderedTab = -1;
       return Scaffold(
         appBar: AppBar(centerTitle: true, title: const BrandTitle()),
-        body: PhoneLoginPage(backend: backend),
+        body: SafeArea(child: PhoneLoginPage(backend: backend)),
       );
     }
+    if (backend.restaurantOwner) return FoodPage(b: backend);
     if (tab > 3) tab = 3;
     return Scaffold(
       appBar: AppBar(

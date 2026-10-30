@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'package:taktooka/core/display_format.dart';
 import 'dart:async';
@@ -67,12 +68,9 @@ class _OffersPageState extends State<OffersPage> {
       await widget.b.extra('coupon', {'code': value});
       await widget.b.refresh();
       if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: AppText(
-              value.isEmpty ? 'تم حذف الكود' : 'تم تفعيل الكود للرحلة القادمة',
-            ),
-          ),
+        showAppNotice(
+          context,
+          value.isEmpty ? 'تم حذف الكود' : 'تم تفعيل الكود للرحلة القادمة',
         );
     } catch (e) {
       if (mounted) setState(() => error = readable(e));
@@ -254,11 +252,17 @@ class _OffersPageState extends State<OffersPage> {
                 ),
                 const SizedBox(height: 16),
                 AppText(
-                  c['reward_type'] == 'free_ride' ? 'رحلة مجانية' : money(c['amount']),
+                  c['reward_type'] == 'free_ride'
+                      ? 'رحلة مجانية'
+                      : money(c['amount']),
                   style: heading(38).copyWith(color: active ? scarlet : muted),
                 ),
                 AppText(
-                  active ? (c['reward_type'] == 'free_ride' ? 'رحلة واحدة بدون دفع كروة' : 'خصم على كروة رحلتك القادمة') : label,
+                  active
+                      ? (c['reward_type'] == 'free_ride'
+                            ? 'رحلة واحدة بدون دفع كروة'
+                            : 'خصم على كروة رحلتك القادمة')
+                      : label,
                   style: TextStyle(fontSize: 16),
                 ),
                 const SizedBox(height: 8),
@@ -303,9 +307,7 @@ class _OffersPageState extends State<OffersPage> {
                             ClipboardData(text: '${c['code']}'),
                           );
                           if (context.mounted)
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: AppText('تم نسخ الكود')),
-                            );
+                            showAppNotice(context, 'تم نسخ الكود');
                         },
                         icon: const Icon(Icons.copy_outlined, color: muted),
                       ),

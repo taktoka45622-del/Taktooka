@@ -1,9 +1,20 @@
 import 'package:taktooka/widgets/booking_map_layer.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'package:taktooka/core/display_format.dart';
+
 import 'dart:async';
 
+import 'package:taktooka/pages/chat_page.dart';
+
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:taktooka/core/trip_navigation.dart';
+import 'package:taktooka/core/route_visibility.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:taktooka/services/offline_roads.dart';
+import 'package:taktooka/core/vehicle_motion.dart';
+import 'package:taktooka/widgets/map_vehicle.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' hide Path;
@@ -15,12 +26,15 @@ import 'package:taktooka/core/app_translations.dart';
 import 'package:taktooka/core/design.dart';
 import 'package:taktooka/core/place_label.dart';
 import 'package:taktooka/core/pin_policy.dart';
+import 'package:taktooka/core/location_fix_quality.dart';
 import 'package:taktooka/core/gender_copy.dart';
 import 'package:taktooka/core/ride_format.dart';
 import 'package:taktooka/core/ride_emergency.dart';
 import 'package:taktooka/models/address_choice.dart';
 import 'package:taktooka/pages/address_search_page.dart';
 import 'package:taktooka/services/backend.dart';
+import 'package:taktooka/services/device_booking.dart';
+import 'package:taktooka/services/booking_pricing.dart';
 import 'package:taktooka/services/refresh_gate.dart';
 import 'package:taktooka/widgets/active_ride_card.dart';
 import 'package:taktooka/widgets/ride_details_panel.dart';
@@ -31,7 +45,6 @@ import 'package:taktooka/widgets/ride_endpoint_marker.dart';
 import 'package:taktooka/widgets/brand_title.dart';
 import 'package:taktooka/widgets/destination_pin.dart';
 import 'package:taktooka/widgets/pickup_pin.dart';
-import 'package:taktooka/widgets/tuktuk_loader.dart';
 
 class RideMap extends StatefulWidget {
   final AddressChoice? favoriteDestination;
@@ -54,9 +67,141 @@ class RideMap extends StatefulWidget {
 }
 
 class _RideMapState extends State<RideMap>
-    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   final controller = MapController();
   late final AnimationController _captainMotion;
+  late final AnimationController _nearbyMotion, _snapMotion;
+  LatLng? _snapFrom, _snapTo;
+  final _nearbyPositions = ValueNotifier<List<Json>>([]);
+  final _nearbyPaths = <String, VehicleMotion>{};
+  int _nearbyRevision = 0;
+  VehicleMotion? _captainPath;
+  double _captainHeading = 0;
+  String _nearbySignature = '';
+  StreamSubscription<int>? _pricingListener;
+  void _animateSnap() {
+    if (!mounted || !mapReady || _snapFrom == null || _snapTo == null) return;
+    final t = Curves.easeOutCubic.transform(_snapMotion.value);
+    controller.move(
+      LatLng(
+        _snapFrom!.latitude + (_snapTo!.latitude - _snapFrom!.latitude) * t,
+        _snapFrom!.longitude + (_snapTo!.longitude - _snapFrom!.longitude) * t,
+      ),
+      controller.camera.zoom,
+    );
+  }
+
+  Future<void> _settleOnRoad(LatLng target) async {
+    if (!mapReady || !mounted) return;
+    if (_reduceMotion) {
+      controller.move(target, controller.camera.zoom);
+      return;
+    }
+    _snapFrom = controller.camera.center;
+    _snapTo = target;
+    try {
+      await _snapMotion.forward(from: 0).orCancel;
+    } catch (_) {}
+  }
+
+  Future<LatLng> _roadPoint(LatLng point) async {
+    if (kIsWeb) return point;
+    try {
+      final value = await OfflineRoads.shared.snap(
+        point.latitude,
+        point.longitude,
+      );
+      final xy = value['point'] as List;
+      return LatLng((xy[0] as num).toDouble(), (xy[1] as num).toDouble());
+    } catch (_) {
+      return point;
+    }
+  }
+
+  Future<VehicleMotion> _roadMotion(LatLng? previous, LatLng next) async {
+    final end = await _roadPoint(next);
+    if (previous == null || _reduceMotion || kIsWeb)
+      return VehicleMotion([end]);
+    final direct = const Distance().as(LengthUnit.Meter, previous, end);
+    if (direct < 3) return VehicleMotion([previous]);
+    if (direct > 200) return VehicleMotion([end]);
+    try {
+      final data = await OfflineRoads.shared.route(
+        previous.latitude,
+        previous.longitude,
+        end.latitude,
+        end.longitude,
+      );
+      final path = geometry(data['geometry']);
+      final motion = VehicleMotion(path);
+      if (motion.length <= math.max(200, direct * 2 + 40)) return motion;
+    } catch (_) {}
+    return VehicleMotion([end]);
+  }
+
+  void _syncNearby() {
+    final rows = b.activeRide == null && !b.captain
+        ? List<Json>.of(b.nearby)
+        : <Json>[];
+    final signature = rows
+        .map(
+          (p) => '${p['user_id']}:${p['lat']}:${p['lng']}:${p['location_at']}',
+        )
+        .join('|');
+    if (signature == _nearbySignature) return;
+    _nearbySignature = signature;
+    final revision = ++_nearbyRevision;
+    unawaited(_prepareNearby(rows, revision));
+  }
+
+  Future<void> _prepareNearby(List<Json> rows, int revision) async {
+    final old = {
+      for (final p in _nearbyPositions.value)
+        '${p['user_id']}': LatLng(
+          (p['lat'] as num).toDouble(),
+          (p['lng'] as num).toDouble(),
+        ),
+    };
+    final paths = <String, VehicleMotion>{};
+    for (final p in rows) {
+      if (!mounted || revision != _nearbyRevision) return;
+      if (p['lat'] is! num || p['lng'] is! num) continue;
+      final id = '${p['user_id']}';
+      paths[id] = await _roadMotion(
+        old[id],
+        LatLng((p['lat'] as num).toDouble(), (p['lng'] as num).toDouble()),
+      );
+    }
+    if (!mounted || revision != _nearbyRevision) return;
+    _nearbyPaths
+      ..clear()
+      ..addAll(paths);
+    _nearbyMotion.forward(from: 0);
+  }
+
+  void _animateNearby() {
+    if (!mounted) return;
+    final t = _reduceMotion ? 1.0 : _nearbyMotion.value;
+    final old = {
+      for (final p in _nearbyPositions.value)
+        '${p['user_id']}': (p['heading'] as num?)?.toDouble() ?? 0.0,
+    };
+    _nearbyPositions.value = [
+      for (final entry in _nearbyPaths.entries)
+        _vehicleRow(
+          entry.key,
+          entry.value.at(t, idleHeading: old[entry.key] ?? 0),
+        ),
+    ];
+  }
+
+  Json _vehicleRow(String id, VehiclePose pose) => {
+    'user_id': id,
+    'lat': pose.point.latitude,
+    'lng': pose.point.longitude,
+    'heading': pose.heading,
+  };
+
   LatLng? _captainFrom, _captainTarget;
   final _captainPosition = ValueNotifier<LatLng?>(null);
   LatLng? get _captainDisplay => _captainPosition.value;
@@ -96,23 +241,35 @@ class _RideMapState extends State<RideMap>
       (c['lat'] as num).toDouble(),
       (c['lng'] as num).toDouble(),
     );
-    final wasFresh = _captainFresh;
     _captainGpsAt = at;
     if (!_captainFresh) {
       _captainMotion.stop();
       return;
     }
     final previous = _captainDisplay;
-    _captainFrom = previous ?? next;
-    _captainTarget = next;
-    if (_reduceMotion ||
-        previous == null ||
-        !wasFresh ||
-        const Distance().as(LengthUnit.Meter, previous, next) > 150) {
+    unawaited(_prepareCaptainMotion(previous, next, at, rideId));
+  }
+
+  Future<void> _prepareCaptainMotion(
+    LatLng? previous,
+    LatLng next,
+    DateTime at,
+    String rideId,
+  ) async {
+    final path = await _roadMotion(previous, next);
+    if (!mounted ||
+        _captainGpsAt != at ||
+        _captainRideId != rideId ||
+        !_captainFresh)
+      return;
+    _captainPath = path;
+    _captainFrom = path.points.first;
+    _captainTarget = path.points.last;
+    if (path.points.length < 2 || _reduceMotion) {
       _captainMotion.stop();
-      _captainDisplay = next;
+      _captainDisplay = path.points.last;
       if (mapReady && _followCaptain)
-        controller.move(next, controller.camera.zoom);
+        controller.move(path.points.last, controller.camera.zoom);
     } else {
       _captainMotion.forward(from: 0);
     }
@@ -128,11 +285,10 @@ class _RideMapState extends State<RideMap>
     final frame = _motionClock.elapsedMilliseconds;
     if (t < 1 && frame - _lastMotionFrame < 32) return;
     _lastMotionFrame = frame;
-    final from = _captainFrom!, to = _captainTarget!;
-    final next = LatLng(
-      from.latitude + (to.latitude - from.latitude) * t,
-      from.longitude + (to.longitude - from.longitude) * t,
-    );
+    final pose = _captainPath?.at(t, idleHeading: _captainHeading);
+    if (pose == null) return;
+    _captainHeading = pose.heading;
+    final next = pose.point;
     _captainDisplay = next;
     if (mapReady &&
         _followCaptain &&
@@ -152,6 +308,10 @@ class _RideMapState extends State<RideMap>
   }
 
   bool _operationBusy = false;
+  bool _changingAvailability = false;
+  bool _activatingAvailability = false;
+  bool _followOwnLocation = true;
+  LatLng? _ownLocationTarget;
   bool _statusBusy = false;
   List<LatLng> _routePoints = [];
   Object? _routeGeometry;
@@ -171,6 +331,7 @@ class _RideMapState extends State<RideMap>
   LatLng? destination;
   Json? quote;
   int bookingStep = 0;
+  bool _awaitingDestination = false;
   Timer? _pinDebounce;
   int pinSeq = 0;
   bool snapping = false;
@@ -206,17 +367,49 @@ class _RideMapState extends State<RideMap>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _snapMotion = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 160),
+    )..addListener(_animateSnap);
     _captainMotion = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     )..addListener(_animateCaptain);
+    _nearbyMotion = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    )..addListener(_animateNearby);
     _syncCaptain();
+    _syncNearby();
+    b.watchNearby();
+    _pricingListener = BookingPricing.updates.stream.listen((_) {
+      if (!mounted || operationBusy || bookingStep != 2 || b.activeRide != null)
+        return;
+      quoteSeq++;
+      _quoteCache.clear();
+      setState(() {
+        quote = null;
+        quoting = false;
+      });
+      unawaited(calculate());
+    });
     countdown = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted &&
           (b.requests.isNotEmpty ||
               b.activeRide?['round_trip_stage'] == 'waiting'))
         _countdownTick.value++;
       if (!mounted) return;
+      final expires = DateTime.tryParse('${quote?['expires_at']}');
+      if (bookingStep == 2 &&
+          !operationBusy &&
+          !quoting &&
+          b.activeRide == null &&
+          expires != null &&
+          !expires.isAfter(b.serverNow.add(const Duration(seconds: 5)))) {
+        quoteSeq++;
+        setState(() => quote = null);
+        unawaited(calculate());
+      }
       final fresh = _captainFresh;
       final ride = b.activeRide;
       final ready = ride != null && rideEmergencyReady(ride, b.serverNow);
@@ -228,6 +421,20 @@ class _RideMapState extends State<RideMap>
       }
     });
     pickup = LatLng(b.pickupLat, b.pickupLng);
+    final known = b.knownPosition;
+    if (known != null &&
+        LocationFixQuality.usable(
+          latitude: known.latitude,
+          longitude: known.longitude,
+          accuracy: known.accuracy,
+          timestamp: known.timestamp,
+          accuracyLimit: 50,
+          ageLimit: const Duration(seconds: 30),
+        )) {
+      myLocation = LatLng(known.latitude, known.longitude);
+      pickup = myLocation!;
+      pickupLabel = 'موقعك الحالي';
+    }
     final r = b.activeRide;
     if (r != null) {
       pickup = point(r['pickup']);
@@ -260,6 +467,11 @@ class _RideMapState extends State<RideMap>
     _countdownTick.dispose();
     _pinDebounce?.cancel();
     pinSeq++;
+    b.unwatchNearby();
+    _pricingListener?.cancel();
+    _snapMotion.dispose();
+    _nearbyMotion.dispose();
+    _nearbyPositions.dispose();
     _captainMotion.dispose();
     _captainPosition.dispose();
     _motionClock.stop();
@@ -271,6 +483,25 @@ class _RideMapState extends State<RideMap>
   void didUpdateWidget(covariant RideMap old) {
     super.didUpdateWidget(old);
     _syncCaptain();
+    _syncNearby();
+    if (b.captain && b.position != null) {
+      final next = LatLng(b.position!.latitude, b.position!.longitude);
+      if (_ownLocationTarget != next) {
+        _ownLocationTarget = next;
+        myLocation = next;
+        if (_followOwnLocation) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted &&
+                mapReady &&
+                b.captain &&
+                _followOwnLocation &&
+                _ownLocationTarget == next) {
+              unawaited(_settleOnRoad(next));
+            }
+          });
+        }
+      }
+    }
     final r = b.activeRide;
     if (r != null) {
       _watchedRideId = r['id'] as String;
@@ -295,7 +526,8 @@ class _RideMapState extends State<RideMap>
         pickup = point(r['pickup']);
         destination = point(r['destination']);
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && !(_captainFresh && _followCaptain)) fit(r['geometry']);
+          if (mounted && !(_captainFresh && _followCaptain))
+            fit(TripNavigation.shared(r)?['geometry'] ?? r['geometry']);
         });
       } else {
         roundTrip = false;
@@ -336,6 +568,7 @@ class _RideMapState extends State<RideMap>
   }
 
   void fit(dynamic raw) {
+    _snapMotion.stop();
     if (!mapReady) return;
     final points = <LatLng>[
       ...geometry(raw),
@@ -392,10 +625,11 @@ class _RideMapState extends State<RideMap>
           .invoke(
             'taktooka-quote',
             body: {
-              'round_trip': roundTrip,
-              'wait_minutes': roundTrip ? waitMinutes : 0,
               'pickup': [pickup.latitude, pickup.longitude],
               'destination': [destination!.latitude, destination!.longitude],
+              'round_trip': roundTrip,
+              'wait_minutes': roundTrip ? waitMinutes : 0,
+              'force_fresh': true,
             },
           )
           .timeout(const Duration(seconds: 20));
@@ -423,13 +657,61 @@ class _RideMapState extends State<RideMap>
     }
   }
 
-  void selected(LatLng p) {
+  Future<bool> _verifyBookingQuote() async {
+    final preview = quote;
+    if (preview == null || preview['id'] == null) return false;
+    final expires = DateTime.tryParse('${preview['expires_at']}');
+    if (expires != null && !expires.isAfter(b.serverNow)) {
+      _quoteCache.clear();
+      setState(() => quote = null);
+      await calculate();
+      return false;
+    }
+    return true;
+  }
+
+  void handleMapEvent(MapEvent event) {
+    if (event is! MapEventWithMove ||
+        b.captain ||
+        b.activeRide != null ||
+        bookingStep == 2)
+      return;
+    final source = event.source;
+    final zoomChanged =
+        (event.camera.zoom - event.oldCamera.zoom).abs() > 0.000001;
+    final zoomOnly =
+        source == MapEventSource.onMultiFinger ||
+        source == MapEventSource.scrollWheel ||
+        source == MapEventSource.doubleTapZoomAnimationController ||
+        source == MapEventSource.doubleTapHold ||
+        source == MapEventSource.keyboard && zoomChanged;
+    if (zoomOnly) {
+      final anchor = bookingStep == 0 ? pickup : destination;
+      if (anchor != null && mapReady) {
+        _snapMotion.stop();
+        controller.move(anchor, event.camera.zoom);
+      }
+      return;
+    }
+    if (!zoomChanged &&
+        (source == MapEventSource.onDrag ||
+            source == MapEventSource.flingAnimationController ||
+            source == MapEventSource.keyboard)) {
+      selected(event.camera.center);
+    }
+  }
+
+  int _selectionRevision = 0;
+
+  void selected(LatLng p, {bool moving = true}) {
     if (b.activeRide != null || b.captain || bookingStep == 2) return;
     final current = bookingStep == 0 ? pickup : destination;
     if (current != null &&
         const Distance().as(LengthUnit.Meter, current, p) < .5) {
       return;
     }
+    _selectionRevision++;
+    _snapMotion.stop();
     final redraw = !_pinMoving || snapping || quote != null || pinError != null;
     pinSeq++;
     quoteSeq++;
@@ -439,15 +721,16 @@ class _RideMapState extends State<RideMap>
       pickup = p;
       pickupLabel = 'الموقع المحدد على الخريطة';
     } else {
+      _awaitingDestination = false;
       destination = p;
       destinationLabel = 'الوجهة المحددة على الخريطة';
     }
     snapping = false;
-    _pinMoving = true;
+    _pinMoving = moving;
     pinError = null;
     if (redraw) setState(() {});
     _pinDebounce?.cancel();
-    _pinDebounce = Timer(const Duration(milliseconds: 500), () {
+    _pinDebounce = Timer(const Duration(milliseconds: 180), () {
       if (!mounted) return;
       setState(() => _pinMoving = false);
       unawaited(snapPin());
@@ -478,6 +761,31 @@ class _RideMapState extends State<RideMap>
     return future;
   }
 
+  Future<Json> _resolvePin(LatLng p) async {
+    if (!kIsWeb && OfflineRoads.shared.isReady) {
+      try {
+        return await OfflineRoads.shared
+            .snap(p.latitude, p.longitude)
+            .timeout(const Duration(milliseconds: 1200));
+      } catch (_) {}
+    }
+    try {
+      return await DeviceBooking.shared
+          .snap(p)
+          .timeout(const Duration(milliseconds: 900));
+    } catch (_) {}
+    final response = await b.db.functions
+        .invoke(
+          'taktooka-pin',
+          body: {
+            'point': [p.latitude, p.longitude],
+            'fast': true,
+          },
+        )
+        .timeout(const Duration(seconds: 7));
+    return Json.from(response.data as Map);
+  }
+
   Future<bool> _snapPin() async {
     final seq = ++pinSeq;
     final step = bookingStep;
@@ -506,21 +814,14 @@ class _RideMapState extends State<RideMap>
       snapping = true;
       pinError = null;
     });
+    unawaited(_refreshPinName(p, seq, step));
     try {
       Json? data = _pinCache[p];
       final cached = data != null;
       if (data == null) {
-        final response = await b.db.functions
-            .invoke(
-              'taktooka-pin',
-              body: {
-                'point': [p.latitude, p.longitude],
-                'fast': true,
-              },
-            )
-            .timeout(const Duration(seconds: 7));
+        final resolved = await _resolvePin(p);
         if (!mounted || seq != pinSeq || step != bookingStep) return false;
-        data = Json.from(response.data as Map);
+        data = resolved;
         if (data['error'] != null) throw Exception(data['error']);
         if (_pinCache.length >= 40) _pinCache.remove(_pinCache.keys.first);
         _pinCache[p] = data;
@@ -545,11 +846,25 @@ class _RideMapState extends State<RideMap>
       }
       final selectedLabel = _selectedLabels[p];
       if (selectedLabel != null) _selectedLabels[corrected] = selectedLabel;
+      final early = _pinNames[p];
+      final earlyParts = early == null
+          ? <String>[]
+          : <String>[
+              early['province'] as String? ?? '',
+              early['area'] as String? ?? '',
+              resolved['street'] as String? ??
+                  resolved['name'] as String? ??
+                  '',
+            ].where((s) => s.trim().isNotEmpty).toSet().toList();
       resolved['name'] = mergePlaceLabel(
         selectedLabel,
-        resolved['name'] as String? ?? '',
+        earlyParts.isNotEmpty
+            ? earlyParts.join('، ')
+            : resolved['name'] as String? ?? '',
       );
       _pinCache[corrected] = data;
+      if (early != null)
+        _cachePinName(corrected, {...early, 'name': resolved['name']});
       _snappedPoint = corrected;
       _snappedStep = step;
       setState(() {
@@ -568,8 +883,9 @@ class _RideMapState extends State<RideMap>
         }
       });
       if (mapReady && corrected != p) {
-        controller.move(corrected, controller.camera.zoom);
+        unawaited(_settleOnRoad(corrected));
       }
+      if (!mounted || seq != pinSeq || step != bookingStep) return false;
       if (!cached || data['address_ready'] != true)
         unawaited(_refreshPinName(corrected, seq, step));
       return true;
@@ -582,43 +898,44 @@ class _RideMapState extends State<RideMap>
           ? 'انتظر لحظات وأعد تحديد النقطة'
           : code.contains('AUTH_REQUIRED')
           ? 'انتهت جلسة الدخول؛ سجّل دخولك مرة ثانية'
-          : 'تعذّر الاتصال بخدمة الشوارع؛ أعد المحاولة';
+          : 'تعذّر تحديد الشارع؛ تحقق من الاتصال وأعد المحاولة';
       if (mounted && seq == pinSeq) setState(() => pinError = message);
       return false;
     } finally {
-      if (mounted && seq == pinSeq) setState(() => snapping = false);
+      if (mounted && seq == pinSeq)
+        setState(() {
+          snapping = false;
+          _pinMoving = false;
+        });
     }
   }
 
+  final _pinNames = <LatLng, Json>{};
+  void _cachePinName(LatLng p, Json data) {
+    if (_pinNames.length >= 80 && !_pinNames.containsKey(p))
+      _pinNames.remove(_pinNames.keys.first);
+    _pinNames[p] = data;
+  }
+
   Future<void> _refreshPinName(LatLng p, int seq, int step) async {
-    try {
-      final response = await b.db.functions
-          .invoke(
-            'taktooka-pin',
-            body: {
-              'point': [p.latitude, p.longitude],
-              'address_only': true,
-              'street': _pinCache[p]?['street'] ?? '',
-            },
-          )
-          .timeout(const Duration(seconds: 8));
+    void apply(Json data) {
       if (!mounted ||
           seq != pinSeq ||
           step != bookingStep ||
           (step == 0 ? pickup : destination) != p ||
           b.activeRide != null)
         return;
-      final data = Json.from(response.data as Map);
       final name = mergePlaceLabel(
         _selectedLabels[p],
         data['name'] as String? ?? '',
       );
-      if (data['address_complete'] != true &&
-          _selectedLabels[p] == null &&
-          (data['street'] as String? ?? '').isEmpty &&
-          (_pinCache[p]?['street'] as String? ?? '').trim().isNotEmpty)
-        return;
       if (name.trim().isEmpty) return;
+      final previous = _pinNames[p];
+      if (previous != null &&
+          (previous['area'] as String? ?? '').isNotEmpty &&
+          (data['area'] as String? ?? '').isEmpty)
+        return;
+      _cachePinName(p, data);
       final cached = _pinCache[p];
       if (cached != null) {
         cached['name'] = name;
@@ -630,17 +947,30 @@ class _RideMapState extends State<RideMap>
         else
           destinationLabel = name;
       });
+    }
+
+    try {
+      final data = await DeviceBooking.shared.address(
+        p,
+        _pinCache[p]?['street'] as String? ?? '',
+        onUpdate: apply,
+      );
+      apply(data);
     } catch (_) {}
   }
 
   Future<void> confirmPoint() async {
+    if (_pinMoving) setState(() => _pinMoving = false);
     if (!b.loggedIn) {
       widget.openAccount();
       return;
     }
-    if (bookingStep == 1 && destination == null) {
-      await searchLocation(false);
+    if (bookingStep == 1 && _awaitingDestination) {
+      widget.toast('حرّك الخريطة وحدد نقطة الوصول أولًا');
       return;
+    }
+    if (bookingStep == 1 && destination == null) {
+      destination = mapReady ? controller.camera.center : pickup;
     }
     _pinDebounce?.cancel();
     final step = bookingStep;
@@ -652,13 +982,24 @@ class _RideMapState extends State<RideMap>
         bookingStep != step ||
         b.activeRide != null)
       return;
+    _snapMotion.stop();
+    if (mapReady)
+      controller.move(
+        step == 0 ? pickup : destination!,
+        controller.camera.zoom,
+      );
     if (bookingStep == 0) {
       setState(() {
         bookingStep = 1;
         expanded = true;
         selectPickup = false;
+        destination = mapReady ? controller.camera.center : pickup;
+        destinationLabel = 'حدد نقطة الوصول على الخريطة';
+        _awaitingDestination = true;
+        _snappedPoint = null;
+        _snappedStep = null;
       });
-      await searchLocation(false);
+      unawaited(snapPin());
     } else {
       setState(() => bookingStep = 2);
       await calculate();
@@ -667,6 +1008,7 @@ class _RideMapState extends State<RideMap>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(BookingPricing.restore());
     if (state == AppLifecycleState.resumed &&
         _waitingForLocationSettings &&
         !_initialLocationPending &&
@@ -691,6 +1033,7 @@ class _RideMapState extends State<RideMap>
   Future<void> _locateInitial() async {
     if (!mounted) return;
     final revision = ++_locationRevision;
+    final selectionRevision = _selectionRevision;
     setState(() {
       _locationAccessIssue = null;
       _initialLocationPending = true;
@@ -704,6 +1047,10 @@ class _RideMapState extends State<RideMap>
           b.captain)
         return;
       final current = LatLng(p.latitude, p.longitude);
+      if (selectionRevision != _selectionRevision || bookingStep != 0) {
+        setState(() => myLocation = current);
+        return;
+      }
       setState(() {
         myLocation = current;
         pickup = current;
@@ -728,17 +1075,56 @@ class _RideMapState extends State<RideMap>
     }
   }
 
-  Future<void> locate() async {
-    await _run(() async {
-      final p = await b.locate();
-      if (!mounted) return;
-      setState(() {
-        myLocation = LatLng(p.latitude, p.longitude);
-      });
-      if (mapReady) controller.move(myLocation!, 17);
-      if (b.activeRide == null && !b.captain && bookingStep != 2)
-        selected(myLocation!);
+  bool _locatingManually = false;
+  void _showLocation(Position p) {
+    if (!mounted) return;
+    if (b.captain) _followOwnLocation = true;
+    setState(() {
+      myLocation = LatLng(p.latitude, p.longitude);
+      _initialLocationError = null;
     });
+    if (mapReady) controller.move(myLocation!, 17);
+    if (b.activeRide == null && !b.captain && bookingStep != 2)
+      selected(myLocation!, moving: false);
+  }
+
+  Future<void> locate() async {
+    final known = b.knownPosition;
+    final ready =
+        known != null &&
+        LocationFixQuality.usable(
+          latitude: known.latitude,
+          longitude: known.longitude,
+          accuracy: known.accuracy,
+          timestamp: known.timestamp,
+        );
+    if (_locatingManually && !ready) return;
+    _locationRevision++;
+    _initialLocationPending = false;
+    _snapMotion.stop();
+    _pinDebounce?.cancel();
+    if (ready) {
+      _showLocation(known);
+      return;
+    }
+    if (_locatingManually) return;
+    _locatingManually = true;
+    final selectionRevision = _selectionRevision;
+    final locationRevision = _locationRevision;
+    try {
+      final p = await b.locate();
+      if (!mounted || locationRevision != _locationRevision) return;
+      if (selectionRevision == _selectionRevision) {
+        _showLocation(p);
+      } else {
+        setState(() => myLocation = LatLng(p.latitude, p.longitude));
+      }
+    } catch (e) {
+      if (mounted && locationRevision == _locationRevision)
+        widget.toast(readable(e));
+    } finally {
+      _locatingManually = false;
+    }
   }
 
   Future<bool> confirm(String title) async =>
@@ -901,26 +1287,45 @@ class _RideMapState extends State<RideMap>
         style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
       ),
       note(
-        b.subscribed
+        b.commissionPlan
+            ? 'نظام النسبة — عمولة الشركة ${b.commerce['commission_percent'] ?? 20}%'
+            : b.subscribed
             ? 'الاشتراك فعّال لغاية ${displayDateTime(b.profile!['expires_at'])}\nالكروة كلها إلك، بدون عمولة.'
             : 'جدّد اشتراكك: ٥٬٠٠٠ دينار مقابل ٧ أيام.',
       ),
       button(
-        !b.subscribed
-            ? 'يرجى الاشتراك بالتطبيق'
+        !b.canReceiveOrders
+            ? 'تجديد عبر الدعم'
+            : _changingAvailability
+            ? (_activatingAvailability
+                  ? 'جاري تفعيل استقبال الطلبات…'
+                  : 'جاري إيقاف استلام الطلبات…')
             : b.tracking
             ? 'إيقاف استلام الطلبات'
             : 'تفعيل لاستقبال الطلبات',
-        b.subscribed
+        b.canReceiveOrders
             ? () => _run(() async {
-                if (b.tracking) {
-                  await b.stopTracking();
-                } else {
-                  await b.enableOrderNotifications?.call();
-                  await b.startTracking();
+                setState(() {
+                  _changingAvailability = true;
+                  _activatingAvailability = !b.tracking;
+                });
+                try {
+                  if (b.tracking) {
+                    await b.stopTracking();
+                  } else {
+                    final notices = b.enableOrderNotifications;
+                    if (notices != null)
+                      unawaited(notices().catchError((Object _) {}));
+                    await b.startTracking();
+                  }
+                } finally {
+                  if (mounted) setState(() => _changingAvailability = false);
                 }
               })
-            : null,
+            : () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ChatPage(b: b)),
+              ),
       ),
       if (b.tracking) ...[
         const SizedBox(height: 12),
@@ -1068,7 +1473,7 @@ class _RideMapState extends State<RideMap>
       pinSeq++;
     });
     try {
-      final gps = await b.locate();
+      final gps = await b.locatePrecise();
       if (!mounted || revision != _locationRevision || b.activeRide != null)
         return;
       setState(() {
@@ -1077,6 +1482,7 @@ class _RideMapState extends State<RideMap>
         pickupLabel = 'موقعك الحالي';
         b.pickupLat = pickup.latitude;
         b.pickupLng = pickup.longitude;
+        _awaitingDestination = false;
         destination = choice.point;
         destinationLabel = choice.label;
         bookingStep = 2;
@@ -1101,6 +1507,7 @@ class _RideMapState extends State<RideMap>
   }
 
   Future<void> searchLocation(bool origin) async {
+    _selectionRevision++;
     final choice = await Navigator.of(context).push<AddressChoice>(
       MaterialPageRoute(
         builder: (_) => Scaffold(
@@ -1127,6 +1534,7 @@ class _RideMapState extends State<RideMap>
         b.pickupLat = pickup.latitude;
         b.pickupLng = pickup.longitude;
       } else {
+        _awaitingDestination = false;
         destination = choice.point;
         destinationLabel = choice.label;
         expanded = true;
@@ -1196,9 +1604,12 @@ class _RideMapState extends State<RideMap>
     });
   }
 
-  int customerFare(int fare) =>
-      b.coupon?['reward_type'] == 'free_ride' ? 0 : fare -
-      ((b.coupon?['amount'] as num?)?.toInt() ?? 0).clamp(0, fare).toInt();
+  int customerFare(int fare) => b.coupon?['reward_type'] == 'free_ride'
+      ? 0
+      : fare -
+            ((b.coupon?['amount'] as num?)?.toInt() ?? 0)
+                .clamp(0, fare)
+                .toInt();
 
   Future<void> retrySearch() async {
     final failed = b.failedRide;
@@ -1259,7 +1670,11 @@ class _RideMapState extends State<RideMap>
             size: 20,
           ),
           title: AppText(
-            bookingStep == 0 ? pickupLabel : destinationLabel,
+            bookingStep == 0
+                ? pickupLabel
+                : _awaitingDestination
+                ? 'حدد نقطة الوصول على الخريطة'
+                : destinationLabel,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1267,10 +1682,7 @@ class _RideMapState extends State<RideMap>
           onTap: () => searchLocation(bookingStep == 0),
         ),
         const SizedBox(height: 12),
-        SizedBox(
-          height: 48,
-          child: snapping ? const TuktukLoader() : const SizedBox.shrink(),
-        ),
+        SizedBox(height: 48, child: const SizedBox.shrink()),
         if (pinError != null)
           TextButton(
             onPressed: snapPin,
@@ -1379,9 +1791,8 @@ class _RideMapState extends State<RideMap>
                         b.coupon?['reward_type'] == 'free_ride'
                             ? 'رحلة مجانية واحدة'
                             : 'خصم ${money(((b.coupon!['amount'] as num).toInt()).clamp(0, (quote!['fare'] as num).toInt()))}',
-                        style: heading(
-                          16,
-                        ).copyWith(color: const Color(0xff29994b)),
+                        style: heading(16)
+                            .copyWith(color: const Color(0xff29994b)),
                       ),
                       AppText(
                         'رمز الخصم: ${b.coupon!['code']}',
@@ -1460,23 +1871,18 @@ class _RideMapState extends State<RideMap>
                               !quoting &&
                               (!roundTrip || waitMinutes != null)
                           ? () => _run(() async {
+                              if (!await _verifyBookingQuote()) return;
+                              if (!mounted || quote == null) return;
                               final result = await b.dispatch('book', {
                                 'quote_id': quote!['id'],
+                                'lock_displayed_fare': true,
                                 'expected_fare': quote!['fare'],
                                 'payment_method': paymentMethod,
                                 'pickup_name': pickupLabel,
                                 'destination_name': destinationLabel,
                               });
-                              if (result['price_changed'] == true) {
-                                if (mounted)
-                                  setState(
-                                    () => quote = Json.from(result['quote']),
-                                  );
-                                widget.toast(
-                                  'تغيّرت تسعيرة النهار أو الليل؛ راجع السعر الجديد واضغط الحجز لتأكيده',
-                                );
-                                return;
-                              }
+                              if (result['price_changed'] == true)
+                                throw StateError('PRICE_LOCK_UNAVAILABLE');
                               b.confirmRideCreated(Json.from(result as Map));
                               unawaited(b.refresh(lightweight: true));
                               unawaited(b.kickDispatch());
@@ -1529,8 +1935,8 @@ class _RideMapState extends State<RideMap>
       ),
       const SizedBox(width: 10),
       SizedBox(
-        width: 34,
-        height: 34,
+        width: 48,
+        height: 48,
         child: PaperCard(
           padding: EdgeInsets.zero,
           onTap: () => searchLocation(origin),
@@ -1547,7 +1953,7 @@ class _RideMapState extends State<RideMap>
           : () => setState(() => paymentMethod = value),
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        height: 58,
+        constraints: const BoxConstraints(minHeight: 58),
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: selected
@@ -1590,60 +1996,34 @@ class _RideMapState extends State<RideMap>
   Widget build(BuildContext context) {
     PreferencesScope.of(context);
     final r = b.activeRide;
-    if (!b.captain &&
-        r == null &&
-        (_initialLocationError != null && myLocation == null)) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_initialLocationPending) ...[
-                const SizedBox(width: 180, child: TuktukLoader()),
-                const AppText('جاري تحديد موقعك الحالي'),
-              ] else ...[
-                const Icon(Icons.location_off_outlined, size: 36, color: red),
-                AppText(_initialLocationError!, textAlign: TextAlign.center),
-                const SizedBox(height: 12),
-                if (_locationAccessIssue == LocationAccessIssue.serviceDisabled)
-                  FilledButton(
-                    onPressed: _openLocationSettings,
-                    child: const AppText('تشغيل الموقع'),
-                  )
-                else if (_locationAccessIssue ==
-                    LocationAccessIssue.permissionDeniedForever)
-                  FilledButton(
-                    onPressed: _openLocationSettings,
-                    child: const AppText('فتح إعدادات الإذن'),
-                  )
-                else if (_locationAccessIssue ==
-                    LocationAccessIssue.permissionDenied)
-                  FilledButton(
-                    onPressed: _locateInitial,
-                    child: const AppText('السماح بالموقع'),
-                  ),
-                TextButton(
-                  onPressed: _locateInitial,
-                  child: const AppText('إعادة تحديد موقعي'),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-    }
-    final rawGeometry = r?['geometry'] ?? quote?['geometry'];
+    final routeVisible = showTripRoute(
+      captainView: b.captain,
+      status: r?['status'] as String?,
+    );
+    final navigation = TripNavigation.shared(r);
+    final rawGeometry =
+        navigation?['geometry'] ??
+        (r?['status'] == 'accepted' || r?['status'] == 'arrived'
+            ? null
+            : r?['geometry'] ?? quote?['geometry']);
     if (!sameSnapshot(_routeGeometry, rawGeometry)) {
       _routeGeometry = rawGeometry;
       _routePoints = geometry(rawGeometry);
     }
-    final route = _routePoints;
+    var route = _routePoints;
+    final livePoint = b.captain && b.position != null
+        ? LatLng(b.position!.latitude, b.position!.longitude)
+        : _captainDisplay;
+    if (r != null && livePoint != null && route.length > 1) {
+      final progress = RouteProgress.remaining(route, livePoint);
+      if (progress.distanceToRoute <= 45) route = progress.points;
+    }
     final markers = <Marker>[
       if (myLocation != null || (b.captain && b.position != null))
         Marker(
-          point:
-              myLocation ?? LatLng(b.position!.latitude, b.position!.longitude),
+          point: b.captain && b.position != null
+              ? LatLng(b.position!.latitude, b.position!.longitude)
+              : myLocation!,
           width: 28,
           height: 28,
           child: Container(
@@ -1687,20 +2067,6 @@ class _RideMapState extends State<RideMap>
                 )
               : const DestinationPin(),
         ),
-      for (final p in b.nearby)
-        Marker(
-          point: LatLng(
-            (p['lat'] as num).toDouble(),
-            (p['lng'] as num).toDouble(),
-          ),
-          width: 36,
-          height: 36,
-          child: Image.asset(
-            'assets/brand.png',
-            cacheWidth: 144,
-            fit: BoxFit.contain,
-          ),
-        ),
     ];
     final height = MediaQuery.sizeOf(context).height;
     final panelMax = bookingStep == 2 && r == null && !b.captain
@@ -1716,8 +2082,18 @@ class _RideMapState extends State<RideMap>
                 options: MapOptions(
                   initialCenter: pickup,
                   initialZoom: 17,
+                  minZoom: 5,
+                  cameraConstraint: CameraConstraint.containCenter(
+                    bounds: LatLngBounds(
+                      const LatLng(29.0, 38.7),
+                      const LatLng(37.5, 48.7),
+                    ),
+                  ),
                   interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                    flags:
+                        InteractiveFlag.all &
+                        ~InteractiveFlag.rotate &
+                        ~InteractiveFlag.pinchMove,
                   ),
                   maxZoom: 20,
                   keepAlive: true,
@@ -1727,7 +2103,10 @@ class _RideMapState extends State<RideMap>
                       if (_captainFresh && _captainDisplay != null) {
                         controller.move(_captainDisplay!, 16);
                       } else {
-                        fit(r['geometry']);
+                        fit(
+                          TripNavigation.shared(r)?['geometry'] ??
+                              r['geometry'],
+                        );
                       }
                     } else if (myLocation != null) {
                       controller.move(pickup, 17);
@@ -1735,21 +2114,21 @@ class _RideMapState extends State<RideMap>
                   },
                   onTap: (_, p) {
                     if (bookingStep != 2 && r == null && !b.captain) {
-                      controller.move(p, controller.camera.zoom);
                       selected(p);
+                      controller.move(p, controller.camera.zoom);
                     }
                   },
+                  onMapEvent: handleMapEvent,
                   onPositionChanged: (camera, gesture) {
+                    if (gesture && b.captain) _followOwnLocation = false;
                     if (gesture && r != null && !b.captain && _followCaptain) {
                       setState(() => _followCaptain = false);
                     }
-                    if (gesture && bookingStep != 2 && !b.captain && r == null)
-                      selected(camera.center);
                   },
                 ),
                 children: [
                   const BookingMapLayer(),
-                  if (route.length > 1)
+                  if (routeVisible && route.length > 1)
                     PolylineLayer(
                       polylines: [
                         Polyline(
@@ -1761,6 +2140,25 @@ class _RideMapState extends State<RideMap>
                         ),
                       ],
                     ),
+                  ValueListenableBuilder<List<Json>>(
+                    valueListenable: _nearbyPositions,
+                    builder: (_, positions, child) => MarkerLayer(
+                      markers: [
+                        for (final p in positions)
+                          Marker(
+                            point: LatLng(
+                              (p['lat'] as num).toDouble(),
+                              (p['lng'] as num).toDouble(),
+                            ),
+                            width: 48,
+                            height: 48,
+                            child: MapVehicle(
+                              heading: (p['heading'] as num?)?.toDouble() ?? 0,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                   ValueListenableBuilder<LatLng?>(
                     valueListenable: _captainPosition,
                     builder: (_, captainPoint, child) => MarkerLayer(
@@ -1769,20 +2167,16 @@ class _RideMapState extends State<RideMap>
                         if (_captainFresh && captainPoint != null)
                           Marker(
                             point: captainPoint,
-                            width: 40,
-                            height: 40,
-                            child: Image.asset(
-                              'assets/brand.png',
-                              cacheWidth: 144,
-                              fit: BoxFit.contain,
-                            ),
+                            width: 54,
+                            height: 54,
+                            child: MapVehicle(heading: _captainHeading),
                           ),
                       ],
                     ),
                   ),
                 ],
               ),
-              if (r != null)
+              if (r != null && routeVisible)
                 Positioned(
                   top: 12,
                   right: 12,
@@ -1792,7 +2186,9 @@ class _RideMapState extends State<RideMap>
                     ),
                     onPressed: () {
                       setState(() => _followCaptain = false);
-                      fit(r['geometry']);
+                      fit(
+                        TripNavigation.shared(r)?['geometry'] ?? r['geometry'],
+                      );
                     },
                     icon: const Icon(Icons.route_outlined, size: 18),
                     label: const AppText('عرض المسار'),
@@ -1817,12 +2213,27 @@ class _RideMapState extends State<RideMap>
                     ),
                   ),
                 ),
-              if (_initialLocationPending)
-                const Positioned(
+              if (_initialLocationError != null && bookingStep == 0)
+                Positioned(
                   top: 12,
                   left: 12,
                   right: 12,
-                  child: LinearProgressIndicator(),
+                  child: Material(
+                    borderRadius: BorderRadius.circular(14),
+                    child: TextButton(
+                      onPressed:
+                          _locationAccessIssue ==
+                                  LocationAccessIssue.serviceDisabled ||
+                              _locationAccessIssue ==
+                                  LocationAccessIssue.permissionDeniedForever
+                          ? _openLocationSettings
+                          : _locateInitial,
+                      child: AppText(
+                        _initialLocationError!,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
                 ),
               Positioned(
                 bottom: 16,
@@ -1860,9 +2271,8 @@ class _RideMapState extends State<RideMap>
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.surface.withValues(alpha: .85),
+                              color: Theme.of(context).colorScheme.surface
+                                  .withValues(alpha: .85),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Column(

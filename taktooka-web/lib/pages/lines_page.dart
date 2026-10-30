@@ -1,9 +1,11 @@
+import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/services/page_snapshot_cache.dart';
 import 'package:taktooka/widgets/line_section.dart';
 import 'package:taktooka/services/refresh_gate.dart';
 import 'package:taktooka/core/app_translations.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'package:taktooka/core/display_format.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -141,14 +143,21 @@ class _LinesPageState extends State<LinesPage> {
   }
 
   Future<void> register() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => RegisterLinePage(b: widget.b)));
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => RegisterLinePage(b: widget.b)));
     if (mounted) await load();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (widget.b.captain &&
+        (widget.b.commissionPlan || widget.b.commerce['vehicle'] == 'bike'))
+      return Scaffold(
+        appBar: AppBar(title: const AppText('الخطوط')),
+        body: const Center(
+          child: AppText('الخطوط متاحة لكباتن التكتك بنظام الاشتراك الأسبوعي'),
+        ),
+      );
     final uid = widget.b.db.auth.currentUser?.id;
     final accepted = rows
         .where((r) => r['captain_id'] == uid && r['status'] == 'accepted')
@@ -375,10 +384,7 @@ class _RegisterLinePageState extends State<RegisterLinePage> {
             back = f;
         });
     } catch (_) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: AppText('اسمح للتطبيق باستخدام الكاميرا')),
-        );
+      if (mounted) showAppNotice(context, 'اسمح للتطبيق باستخدام الكاميرا');
     }
   }
 
@@ -391,9 +397,7 @@ class _RegisterLinePageState extends State<RegisterLinePage> {
           morningDays.intersection(afternoonDays).isNotEmpty ||
           morningDays.intersection(excluded).isNotEmpty ||
           afternoonDays.intersection(excluded).isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: AppText('حدد كل يوم: صباحي أو ظهري أو عطلة')),
-        );
+        showAppNotice(context, 'حدد كل يوم: صباحي أو ظهري أو عطلة');
         return;
       }
       for (final group in [morningDays, afternoonDays]) {
@@ -403,11 +407,7 @@ class _RegisterLinePageState extends State<RegisterLinePage> {
             ? [afternoonDeparture, afternoonArrival, afternoonReturn]
             : [departure, arrival, returnHome];
         if (times.any((time) => time == null) || !validTimes(times)) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: AppText('حدد الانطلاق ثم الوصول ثم الرجوع لكل دوام'),
-            ),
-          );
+          showAppNotice(context, 'حدد الانطلاق ثم الوصول ثم الرجوع لكل دوام');
           return;
         }
         for (final day in group)
@@ -429,11 +429,7 @@ class _RegisterLinePageState extends State<RegisterLinePage> {
         front == null ||
         back == null ||
         excluded.length == 7) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: AppText('أكمل المواقع والمستمسكات وأوقات الدوام'),
-        ),
-      );
+      showAppNotice(context, 'أكمل المواقع والمستمسكات وأوقات الدوام');
       return;
     }
     final firstDate = lineServiceDates(start, 1, excluded).first;
@@ -489,10 +485,7 @@ class _RegisterLinePageState extends State<RegisterLinePage> {
           ),
         );
     } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: AppText(lineError(e))));
+      if (mounted) showAppNotice(context, lineError(e));
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -823,9 +816,9 @@ class _RegisterLinePageState extends State<RegisterLinePage> {
                   ),
                   validator: (v) {
                     final n = int.tryParse(
-                      westernDigits(
-                        v ?? '',
-                      ).replaceAll(',', '').replaceAll('٬', ''),
+                      westernDigits(v ?? '')
+                          .replaceAll(',', '')
+                          .replaceAll('٬', ''),
                     );
                     return n == null || n < 500 || n > 10000000
                         ? uiText('أدخل مبلغًا صحيحًا بالدينار')

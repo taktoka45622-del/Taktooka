@@ -30,6 +30,45 @@ String uiText(
 }
 
 const translatedCopy = <String, (String, String)>{
+  'لا يوجد اتصال بالإنترنت': (
+    'No internet connection',
+    'پەیوەندی ئینتەرنێت نییە',
+  ),
+  'حاول مرة ثانية': ('Please try again', 'تکایە دووبارە هەوڵ بدە'),
+  'جاري فحص الاتصال…': ('Checking connection…', 'پەیوەندی دەپشکنرێت…'),
+  'أدخل رمز حسابك': (
+    'Enter your account password',
+    'وشەی نهێنی هەژمارەکەت بنووسە',
+  ),
+  'إنشاء رمز الحساب': (
+    'Create account password',
+    'وشەی نهێنی هەژمار دروست بکە',
+  ),
+  'رمز الحساب': ('Account password', 'وشەی نهێنی هەژمار'),
+  'اكتب رمز حسابك': (
+    'Enter your account password',
+    'وشەی نهێنی هەژمارەکەت بنووسە',
+  ),
+  'رمز الحساب من 8 إلى 128 حرف': (
+    'Use 8 to 128 characters',
+    'لە 8 بۆ 128 پیت بەکاربهێنە',
+  ),
+  'ليس لدي حساب — إنشاء حساب': (
+    'No account? Create account',
+    'هەژمارم نییە — دروستکردنی هەژمار',
+  ),
+  'لدي حساب — تسجيل الدخول': (
+    'Have an account? Sign in',
+    'هەژمارم هەیە — چوونەژوورەوە',
+  ),
+  'هذا الرقم غير مسجل؛ اختر إنشاء حساب': (
+    'This number is not registered; choose Create account',
+    'ئەم ژمارەیە تۆمار نەکراوە؛ دروستکردنی هەژمار هەڵبژێرە',
+  ),
+  'هذا الرقم مسجل؛ اختر تسجيل الدخول': (
+    'This number is registered; choose Sign in',
+    'ئەم ژمارەیە تۆمار کراوە؛ چوونەژوورەوە هەڵبژێرە',
+  ),
   "ذهاب وإياب": ("Round trip", "چوون و گەڕانەوە"),
   "نرجعك إلى نقطة الانطلاق": (
     "Return to your pickup point",
@@ -277,6 +316,11 @@ const translatedCopy = <String, (String, String)>{
   "موقعي الحالي": ("My location", "شوێنی ئێستام"),
   "موقعك الحالي": ("Your current location", "شوێنی ئێستات"),
   "متابعة الكابتن": ("Follow captain", "بەدواداچوونی کاپتن"),
+  "تحديد تطبيق الخرائط": ("Choose maps app", "هەڵبژاردنی ئەپی نەخشە"),
+  "اختيار تطبيق الخرائط المفضّل": ("Choose your preferred maps app", "هەڵبژاردنی ئەپی نەخشەی دڵخواز"),
+  "الملاحة للزبون": ("Navigate to customer", "ڕێنیشاندان بۆ کڕیار"),
+  "الملاحة للوجهة": ("Navigate to destination", "ڕێنیشاندان بۆ مەبەست"),
+  "الملاحة للرجعة": ("Navigate back", "ڕێنیشاندان بۆ گەڕانەوە"),
   "ويز للزبون": ("Waze to customer", "وەیز بۆ کڕیار"),
   "ويز للوجهة": ("Waze to destination", "وەیز بۆ مەبەست"),
   "وصلت": ("I've arrived", "گەیشتم"),
@@ -613,10 +657,22 @@ const translatedCopy = <String, (String, String)>{
   ),
   "رحلة مجانية واحدة": ("One free trip", "یەک گەشتی بەخۆڕایی"),
   "رحلة مجانية": ("Free trip", "گەشتی بەخۆڕایی"),
-  "رحلة واحدة بدون دفع كروة": ("One trip without paying a fare", "یەک گەشت بەبێ پارەدانی کرێ"),
-  "رحلة مجانية — بدون دفع كروة": ("Free trip — no fare to pay", "گەشتی بەخۆڕایی — بەبێ پارەدانی کرێ"),
-  "رحلة مجانية للزبون؛ تحصل على يوم اشتراك إضافي بعد إكمالها": ("Free customer trip; you receive one extra subscription day after completion", "گەشتی بەخۆڕایی بۆ کڕیار؛ دوای تەواوبوونی ڕۆژێکی زیادەی بەشداریکردن وەردەگریت"),
-  "انتهت الرحلة المجانية؟ راح ينضاف يوم لاشتراكك.": ("Has the free trip ended? One day will be added to your subscription.", "گەشتە بەخۆڕاییەکە تەواو بوو؟ ڕۆژێک زیاد دەکرێت بۆ بەشداریکردنەکەت."),
+  "رحلة واحدة بدون دفع كروة": (
+    "One trip without paying a fare",
+    "یەک گەشت بەبێ پارەدانی کرێ",
+  ),
+  "رحلة مجانية — بدون دفع كروة": (
+    "Free trip — no fare to pay",
+    "گەشتی بەخۆڕایی — بەبێ پارەدانی کرێ",
+  ),
+  "رحلة مجانية للزبون؛ تحصل على يوم اشتراك إضافي بعد إكمالها": (
+    "Free customer trip; you receive one extra subscription day after completion",
+    "گەشتی بەخۆڕایی بۆ کڕیار؛ دوای تەواوبوونی ڕۆژێکی زیادەی بەشداریکردن وەردەگریت",
+  ),
+  "انتهت الرحلة المجانية؟ راح ينضاف يوم لاشتراكك.": (
+    "Has the free trip ended? One day will be added to your subscription.",
+    "گەشتە بەخۆڕاییەکە تەواو بوو؟ ڕۆژێک زیاد دەکرێت بۆ بەشداریکردنەکەت.",
+  ),
   "العروض والخصومات": ("Offers and discounts", "ئۆفەر و داشکاندن"),
   "الكابتن": ("Captain", "کاپتن"),
   "الكروة واضحة قبل الطلب": (

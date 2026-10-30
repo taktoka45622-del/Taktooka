@@ -4,7 +4,8 @@ String mergePlaceLabel(String? selected, String resolved) {
   for (final part in [...selected.split('،'), ...resolved.split('،')]) {
     final value = part.trim();
     if (value.isEmpty || parts.contains(value)) continue;
-    if (value.startsWith('قرب ') && parts.contains(value.substring(4))) continue;
+    if (value.startsWith('قرب ') && parts.contains(value.substring(4)))
+      continue;
     parts.add(value);
   }
   final result = parts.join('، ');

@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.0'
+          flutter-version: '3.47.9'
           channel: stable
           cache: true
       - name: Resolve web dependencies
@@ -33,10 +33,10 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings lib
       - name: Test tracking, notifications and booking
         working-directory: taktooka-web
-        run: flutter test test/background_tracking_test.dart test/offer_ring_test.dart test/ride_booking_regression_test.dart
+        run: flutter test test/background_tracking_test.dart test/account_entry_test.dart test/ride_booking_regression_test.dart
       - name: Build Taktooka Web
         working-directory: taktooka-web
-        run: flutter build web --release --base-href /Taktooka/app/ --pwa-strategy=none --no-web-resources-cdn
+        run: flutter build web --release --base-href /Taktooka/app/ --no-wasm-dry-run --no-web-resources-cdn
       - name: Add independent web app to Pages
         run: |
           mkdir -p dist/app

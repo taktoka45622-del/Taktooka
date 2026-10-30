@@ -1,10 +1,10 @@
 import 'package:flutter_map/flutter_map.dart';
 import 'package:taktooka/core/app_preferences.dart';
 import 'dart:convert';
+import 'dart:async';
+import 'package:taktooka/core/map_tile_warmup.dart';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:vector_map_tiles/vector_map_tiles.dart' as vector;
 import 'package:vector_map_tiles/src/style/uri_mapper.dart';
@@ -14,6 +14,8 @@ import 'package:taktooka/core/gender_copy.dart';
 import 'package:taktooka/core/map_config.dart';
 import 'package:taktooka/core/poi_map_style.dart';
 import 'package:taktooka/services/poi_sprites.dart';
+import 'package:taktooka/services/persistent_map_client.dart';
+import 'package:taktooka/services/persistent_vector_provider.dart';
 
 class StreetMapLayer extends StatefulWidget {
   const StreetMapLayer({super.key});
@@ -22,12 +24,64 @@ class StreetMapLayer extends StatefulWidget {
     String language = 'ar',
   }) => _StreetMapLayerState.sharedStyle(dark: dark, language: language);
   static Future<void> warmUp() async {
-    if (kIsWeb && Supabase.instance.client.auth.currentUser == null) return;
     try {
       await _StreetMapLayerState.sharedStyle(
         dark: appPreferences.themeMode == ThemeMode.dark,
         language: appPreferences.language,
       );
+    } catch (_) {}
+  }
+
+  static final _tileWarmup = MapTileWarmup();
+  static Future<void>? _areaWarm;
+  static Future<void> warmAround(
+    double latitude,
+    double longitude, {
+    required bool Function() active,
+  }) {
+    return _areaWarm ??= _warmAround(latitude, longitude, active).whenComplete(
+      () {
+        _areaWarm = null;
+      },
+    );
+  }
+
+  static Future<void> _warmAround(
+    double latitude,
+    double longitude,
+    bool Function() active,
+  ) async {
+    if (!active()) return;
+    try {
+      final style = await loadStyle(
+        dark: appPreferences.themeMode == ThemeMode.dark,
+        language: appPreferences.language,
+      );
+      if (!active()) return;
+      final loads = <Future<void> Function()>[];
+      final keys = <String>[];
+      for (final entry
+          in style.providers.tileProviderBySource.entries
+              .where((e) => e.value.type == vector.TileProviderType.vector)
+              .take(2)) {
+        final provider = entry.value;
+        final tiles = mapWarmupTiles(
+          latitude,
+          longitude,
+          provider.minimumZoom,
+          provider.maximumZoom,
+        );
+        if (tiles.isEmpty) continue;
+        keys.add('${entry.key}:${tiles.first.key}');
+        for (final tile in tiles) {
+          loads.add(() async {
+            await provider
+                .provide(vector.TileIdentity(tile.z, tile.x, tile.y))
+                .timeout(const Duration(seconds: 6));
+          });
+        }
+      }
+      await _tileWarmup.run(keys.join('|'), loads, active: active);
     } catch (_) {}
   }
 
@@ -46,7 +100,7 @@ class _StreetMapLayerState extends State<StreetMapLayer> {
       });
 
   static Future<http.Response> _get(String uri) async {
-    final response = await http
+    final response = await PersistentMapClient.shared
         .get(Uri.parse(uri))
         .timeout(const Duration(seconds: 12));
     if (response.statusCode != 200) throw StateError('MAP_UNAVAILABLE');
@@ -74,7 +128,7 @@ class _StreetMapLayerState extends State<StreetMapLayer> {
         if (tiles == null || tiles.isEmpty) return null;
         return MapEntry(
           '${entry.key}',
-          vector.NetworkVectorTileProvider(
+          PersistentVectorProvider(
             type: types.first,
             urlTemplate: mapper.mapTiles('${tiles.first}'),
             minimumZoom: (metadata['minzoom'] as num?)?.toInt() ?? 1,
@@ -290,18 +344,13 @@ class _StreetMapLayerState extends State<StreetMapLayer> {
           tileProviders: style.providers,
           sprites: style.sprites,
           tileOffset: vector.TileOffset.mapbox,
-          layerMode: vector.VectorTileLayerMode.vector,
+          layerMode: vector.VectorTileLayerMode.raster,
           maximumZoom: 20,
-          memoryTileDataCacheMaxSize: 48,
+          maximumTileSubstitutionDifference: 3,
+          memoryTileDataCacheMaxSize: 64,
           memoryTileCacheMaxSize: 32 * 1024 * 1024,
           fileCacheMaximumSizeInBytes: 80 * 1024 * 1024,
         );
-      if (kIsWeb && mapboxToken.isEmpty && !snapshot.hasError) {
-        return const ColoredBox(
-          color: Color(0xfff1efef),
-          child: Center(child: CircularProgressIndicator()),
-        );
-      }
       return Stack(
         children: [
           ColorFiltered(
@@ -331,6 +380,10 @@ class _StreetMapLayerState extends State<StreetMapLayer> {
                 : const ColorFilter.mode(Colors.transparent, BlendMode.srcOver),
             child: TileLayer(
               urlTemplate: mapTileUrl,
+              tileProvider: NetworkTileProvider(
+                httpClient: PersistentMapClient.shared,
+                cachingProvider: const DisabledMapCachingProvider(),
+              ),
               maxNativeZoom: 20,
               maxZoom: 20,
               userAgentPackageName: 'com.taktooka.app',

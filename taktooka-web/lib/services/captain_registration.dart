@@ -28,6 +28,8 @@ const iraqProvinces = [
 const captainDocumentLabels = {
   'id_front': 'صورة الوجه الأمامي للجنسية',
   'id_back': 'صورة الوجه الخلفي للجنسية',
+  'residence_front': 'صورة الوجه الأمامي لبطاقة السكن',
+  'residence_back': 'صورة الوجه الخلفي لبطاقة السكن',
 };
 
 Future<Json?> captainRegistration(
@@ -51,7 +53,7 @@ String captainRegistrationError(Object e) {
     'AREA_REQUIRED': 'اختر المحافظة واكتب المنطقة',
     'ACCOUNT_PHONE_REQUIRED': uiText('اكتب رقم الهاتف المسجل بحسابك'),
     'VEHICLE_REQUIRED': 'أكمل رقم الشاصي ولون المركبة وموديلها',
-    'DOCUMENTS_REQUIRED': 'أضف صورتي الوجه الأمامي والخلفي للجنسية',
+    'DOCUMENTS_REQUIRED': 'أكمل صور المستمسكات المطلوبة حسب نظام العمل',
     'APPLICATION_LOCKED': 'طلبك قيد المراجعة؛ لا يمكن تعديله حاليًا',
     'ALREADY_CAPTAIN': 'حسابك مفعّل ككابتن',
     'INVALID_DOCUMENT': 'تعذّر حفظ الصورة؛ أعد التقاطها',

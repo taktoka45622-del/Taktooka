@@ -1,5 +1,3 @@
-import 'package:taktooka/services/web_push_stub.dart'
-    if (dart.library.js_interop) 'package:taktooka/services/web_push_browser.dart';
 import 'package:taktooka/core/display_format.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -15,6 +13,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:taktooka/core/firebase_options.dart';
 import 'package:taktooka/services/backend.dart';
+import 'package:taktooka/services/booking_pricing.dart';
 
 Duration offerRingDuration(DateTime? expires, {DateTime? now}) {
   final left =
@@ -38,6 +37,9 @@ Map<String, dynamic> noticeData(Map<String, dynamic> n) => {
   ...?n['target'] as Map<String, dynamic>?,
 };
 final nativeNotices = FlutterLocalNotificationsPlugin();
+const offerChannelId = 'tkt_requests_v4';
+const offerChannelName = 'طلبات المشاوير';
+final offerVibration = Int64List.fromList([0, 600, 300, 600, 300, 900]);
 const appleNotices = MethodChannel('taktooka/notifications');
 Future<void> cancelAppleOffer(String id) async {
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
@@ -67,6 +69,23 @@ Future<void> setupNative({void Function(NotificationResponse)? onTap}) async {
     ),
     onDidReceiveNotificationResponse: onTap,
   );
+  await nativeNotices
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(
+        AndroidNotificationChannel(
+          offerChannelId,
+          offerChannelName,
+          description: 'طلبات الكابتن مع نغمة واهتزاز حتى انتهاء العرض',
+          importance: Importance.max,
+          playSound: true,
+          sound: const RawResourceAndroidNotificationSound('captain_request'),
+          enableVibration: true,
+          vibrationPattern: offerVibration,
+          audioAttributesUsage: AudioAttributesUsage.notificationRingtone,
+        ),
+      );
 }
 
 Future<void> _displayNotice(
@@ -97,18 +116,24 @@ Future<void> _displayNotice(
   seen.add(event);
   await nativeNotices.show(
     id,
-    englishDigits('${n['title'] ?? 'تكتوكة'}'),
-    englishDigits('${n['body'] ?? ''}'),
+    englishDigits(offer ? 'كابتن، عندك رحلة' : '${n['title'] ?? 'تكتوكة'}'),
+    englishDigits(offer ? 'اضغط لعرض الرحلة وقبولها' : '${n['body'] ?? ''}'),
     NotificationDetails(
       android: AndroidNotificationDetails(
-        offer ? 'tkt_requests_v3' : 'tkt_updates_v1',
-        offer ? 'طلبات المشاوير' : 'تحديثات تكتوكة',
+        offer ? offerChannelId : 'tkt_updates_v1',
+        offer ? offerChannelName : 'تحديثات تكتوكة',
         channelDescription: offer
             ? 'طلبات الكابتن مع جرس حتى 30 ثانية'
             : 'الرحلات والدعم والمحفظة والحساب',
         importance: Importance.max,
         priority: Priority.high,
-        playSound: ring,
+        playSound: true,
+        silent: !ring,
+        enableVibration: ring,
+        vibrationPattern: offer ? offerVibration : null,
+        audioAttributesUsage: offer
+            ? AudioAttributesUsage.notificationRingtone
+            : AudioAttributesUsage.notification,
         sound: offer
             ? const RawResourceAndroidNotificationSound('captain_request')
             : null,
@@ -118,8 +143,11 @@ Future<void> _displayNotice(
               ).inMilliseconds
             : null,
         additionalFlags: offer && ring ? Int32List.fromList([4]) : null,
+        ticker: offer ? 'كابتن، عندك رحلة' : null,
         autoCancel: true,
-        category: AndroidNotificationCategory.message,
+        category: offer
+            ? AndroidNotificationCategory.call
+            : AndroidNotificationCategory.message,
       ),
       iOS: DarwinNotificationDetails(
         presentAlert: true,
@@ -141,6 +169,7 @@ Future<void> firebaseBackground(RemoteMessage message) async {
     await Firebase.initializeApp(
       options: TaktookaFirebaseOptions.currentPlatform,
     );
+    if (await BookingPricing.applyPayload(noticeData(message.data))) return;
     await setupNative();
     if (defaultTargetPlatform == TargetPlatform.android ||
         message.data['kind'] == 'offer_end')
@@ -223,15 +252,6 @@ class NotificationCenter extends ChangeNotifier {
     } catch (error) {
       deviceError = describeDeviceError(error);
     }
-    if (kIsWeb) {
-      listenWebPush((value, clicked) {
-        if (clicked) {
-          tap(value);
-        } else {
-          receive(value);
-        }
-      });
-    }
     await initializeFirebase();
     backend.beforeSignOut = unbind;
     backend.silenceOffer = silenceOffer;
@@ -312,28 +332,7 @@ class NotificationCenter extends ChangeNotifier {
   Future<void> enableDeviceNotifications({
     bool requestPermission = true,
   }) async {
-    if (closed || connecting || user == null) return;
-    if (kIsWeb) {
-      connecting = true;
-      lastDeviceAttempt = DateTime.now();
-      final uid = user;
-      try {
-        final value = await requestWebPush(requestPermission);
-        if (uid != user || closed) return;
-        if (value != null && value.isNotEmpty) {
-          token = value;
-          await register();
-        }
-      } catch (_) {
-        deviceRegistered = false;
-        deviceError =
-            'تعذر تفعيل إشعارات المتصفح. اسمح بالإشعارات وافتح الموقع بمتصفح يدعمها مثل Chrome.';
-      } finally {
-        connecting = false;
-        if (!closed) notifyListeners();
-      }
-      return;
-    }
+    if (kIsWeb || closed || connecting || user == null) return;
     connecting = true;
     lastDeviceAttempt = DateTime.now();
     deviceRegistered = false;
@@ -384,6 +383,7 @@ class NotificationCenter extends ChangeNotifier {
       );
       if (uid != user || closed) return;
       if (token == null) throw StateError('FCM_TOKEN_UNAVAILABLE');
+      await FirebaseMessaging.instance.subscribeToTopic('taktooka-pricing-v1');
       await register();
     } catch (error) {
       deviceError = describeDeviceError(error);
@@ -441,9 +441,7 @@ class NotificationCenter extends ChangeNotifier {
     try {
       await rpc('register', {
         'token': deviceToken,
-        'platform': kIsWeb
-            ? 'web'
-            : defaultTargetPlatform == TargetPlatform.iOS
+        'platform': defaultTargetPlatform == TargetPlatform.iOS
             ? 'ios'
             : 'android',
       });
@@ -490,7 +488,9 @@ class NotificationCenter extends ChangeNotifier {
     if (uid == null || loading || closed) return;
     loading = true;
     try {
-      final values = Backend.rows(await rpc('list'));
+      final values = Backend.rows(
+        await rpc('list'),
+      ).where((n) => n['kind'] != 'pricing_update').toList();
       if (uid != user || closed) return;
       final previous = inbox.map((n) => n['id']).toSet();
       final incoming = loadedInbox
@@ -522,7 +522,12 @@ class NotificationCenter extends ChangeNotifier {
   }
 
   void receive(Map<String, dynamic> value) {
-    final n = noticeData(value), recipient = n['recipient_id'] ?? n['user_id'];
+    final n = noticeData(value);
+    if (n['kind'] == 'pricing_update') {
+      unawaited(BookingPricing.applyPayload({...n, 'ui_visible': foreground}));
+      return;
+    }
+    final recipient = n['recipient_id'] ?? n['user_id'];
     if (recipient != user || closed) return;
     if (n['kind'] == 'offer_end') {
       if (ringing == n['offer_id']) unawaited(stopRing());
@@ -637,6 +642,10 @@ class NotificationCenter extends ChangeNotifier {
 
   void tap(Map<String, dynamic> raw) {
     final n = noticeData(raw);
+    if (n['kind'] == 'pricing_update') {
+      unawaited(BookingPricing.applyPayload({...n, 'ui_visible': foreground}));
+      return;
+    }
     if (user == null) {
       pending = n;
       return;

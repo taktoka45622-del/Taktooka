@@ -125,7 +125,10 @@ Future<LatLng?> resolveSharedLocation(
 
 Uri? rideWazeUri(Map<String, dynamic> ride) {
   final value =
-      ride[ride['status'] == 'in_progress' && ride['round_trip_stage'] != 'returning' ? 'destination' : 'pickup'];
+      ride[ride['status'] == 'in_progress' &&
+              ride['round_trip_stage'] != 'returning'
+          ? 'destination'
+          : 'pickup'];
   if (value is! List ||
       value.length != 2 ||
       value.any((n) => n is! num || !n.isFinite))

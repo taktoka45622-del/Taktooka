@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'dart:convert';
 
@@ -75,10 +76,7 @@ class _DispatchSettingsPageState extends State<DispatchSettingsPage> {
       if (boundaries) data['zones'] = jsonDecode(zones.text);
       await widget.b.dispatch('configure', data);
       await load();
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: AppText('تم حفظ إعدادات توزيع الرحلات')),
-        );
+      if (mounted) showAppNotice(context, 'تم حفظ إعدادات توزيع الرحلات');
     } catch (e) {
       if (mounted)
         setState(() {

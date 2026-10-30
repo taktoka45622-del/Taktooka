@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/map_navigation_setting.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -42,6 +43,7 @@ class SettingsPage extends StatelessWidget {
         leading: const Icon(Icons.location_on_outlined),
         onTap: selectCity,
       ),
+      if (backend.captain) const MapNavigationSetting(),
       const PreferencesPanel(),
       ListTile(
         title: const AppText('سياسة الخصوصية وشروط الاستخدام'),

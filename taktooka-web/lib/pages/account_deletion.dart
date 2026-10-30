@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/app_notice.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -54,11 +55,7 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
       await b.signOut();
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: AppText('تم حذف حساب تكتوكة وبياناته الشخصية'),
-          ),
-        );
+        showAppNotice(context, 'تم حذف حساب تكتوكة وبياناته الشخصية');
       }
     } catch (e) {
       final data = e is FunctionException

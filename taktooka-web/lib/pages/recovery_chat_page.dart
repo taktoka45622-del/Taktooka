@@ -35,7 +35,12 @@ class _RecoveryChatState extends State<RecoveryChat> {
   void initState() {
     super.initState();
     start();
-    timer = Timer.periodic(const Duration(seconds: 2), (_) { if (mounted && ModalRoute.of(context)?.isCurrent == true && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) unawaited(load()); });
+    timer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (mounted &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed)
+        unawaited(load());
+    });
   }
 
   @override

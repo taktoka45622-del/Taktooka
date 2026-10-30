@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'dart:async';
 
@@ -109,10 +110,7 @@ class _AdminFeaturesState extends State<AdminFeatures> {
     );
     final n = readNumber(v);
     if (n == null || n <= 0) {
-      if (v != null && mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: AppText('اكتب مبلغ صحيح')));
+      if (v != null && mounted) showAppNotice(context, 'اكتب مبلغ صحيح');
       return;
     }
     if (!mounted ||
@@ -256,7 +254,11 @@ class _AdminFeaturesState extends State<AdminFeatures> {
           for (final c in Backend.rows(data['coupons'] ?? []))
             Card(
               child: ListTile(
-                title: AppText(c['reward_type'] == 'free_ride' ? '${c['code']} • رحلة مجانية' : '${c['code']} • ${c['amount']} دينار'),
+                title: AppText(
+                  c['reward_type'] == 'free_ride'
+                      ? '${c['code']} • رحلة مجانية'
+                      : '${c['code']} • ${c['amount']} دينار',
+                ),
                 subtitle: AppText(
                   'ينتهي ${c['expires_at'].toString().substring(0, 10)} • الحد ${c['max_uses']}',
                 ),

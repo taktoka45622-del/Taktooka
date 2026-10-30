@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:taktooka/pages/commerce_page.dart';
 
 import 'package:taktooka/core/design.dart';
 import 'package:taktooka/core/gender_copy.dart';
@@ -69,6 +70,25 @@ class ProfileHub extends StatelessWidget {
           ],
         ),
       ),
+      if (b.captain) ...[
+        PaperCard(
+          onTap: () =>
+              Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => FoodPage(b: b))),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AppText('أموال الشركة — يجب تسديدها', style: heading(18)),
+              AppText(
+                money(b.commerce['company_debt'] ?? 0),
+                style: heading(25),
+              ),
+              if (b.commerce['debt_blocked'] == true)
+                FilledButton(onPressed: support, child: const AppText('تجديد')),
+            ],
+          ),
+        ),
+      ],
       const SizedBox(height: 14),
       PaperCard(
         onTap: wallet,

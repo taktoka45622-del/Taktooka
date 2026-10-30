@@ -1,4 +1,5 @@
 import 'package:taktooka/core/numeric_localizations.dart';
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -10,15 +11,19 @@ import 'package:uuid/uuid.dart';
 import 'package:taktooka/core/app_translations.dart';
 import 'package:taktooka/core/design.dart';
 import 'package:taktooka/core/gender_copy.dart';
-import 'package:taktooka/pages/verification_flow/capture_page.dart'
-    if (dart.library.js_interop) 'package:taktooka/pages/verification_flow/capture_page_web.dart';
+import 'package:taktooka/pages/verification_flow/capture_page.dart';
 import 'package:taktooka/services/backend.dart';
 import 'package:taktooka/services/captain_registration.dart';
 import 'package:taktooka/widgets/flip_card_hint.dart';
 
 class CaptainRegistrationPage extends StatefulWidget {
   final Backend backend;
-  const CaptainRegistrationPage({super.key, required this.backend});
+  final String vehicle;
+  const CaptainRegistrationPage({
+    super.key,
+    required this.backend,
+    this.vehicle = 'tuktuk',
+  });
   @override
   State<CaptainRegistrationPage> createState() =>
       _CaptainRegistrationPageState();
@@ -36,7 +41,14 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
   final Map<String, String> previews = {};
   Json? application;
   bool loading = true, busy = false, foreground = true;
-  int step = 0;
+  int step = -1;
+  String plan = 'weekly';
+  List<String> get slots => [
+    'id_front',
+    'id_back',
+    if (plan == 'weekly') ...['residence_front', 'residence_back'],
+  ];
+  int get reviewStep => slots.length + 1;
   String? error;
   Timer? timer;
   Backend get b => widget.backend;
@@ -75,6 +87,7 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
       application = await captainRegistration(b, 'get');
       if (!mounted) return;
       if (initial) {
+        plan = application?['work_plan'] ?? 'weekly';
         name.text = application?['full_name'] ?? b.profile?['name'] ?? '';
         province.text = application?['province'] ?? b.city;
         area.text = application?['area'] ?? '';
@@ -87,14 +100,8 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
             ? await picker.retrieveLostData()
             : LostDataResponse.empty();
         final slot = application?['pending_slot'] as String?;
-        if (!locked && lost.files?.isNotEmpty == true && slot == 'portrait') {
-          if (!await validPersonalPhoto(lost.files!.first))
-            throw Exception('FACE_REQUIRED');
-          await upload(
-            slot!,
-            lost.files!.first,
-            checks: {'profile_single_face': true},
-          );
+        if (!locked && lost.files?.isNotEmpty == true && slots.contains(slot)) {
+          await upload(slot!, lost.files!.first);
         }
         if (lost.exception != null)
           error = captainRegistrationError(lost.exception!);
@@ -127,6 +134,8 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
   }
 
   Json fields() => {
+    'work_plan': plan,
+    'vehicle_kind': widget.vehicle,
     'full_name': name.text.trim(),
     'province': province.text.trim(),
     'area': area.text.trim(),
@@ -198,18 +207,7 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
   }
 
   void pick(String slot) => run(() async {
-    if (kIsWeb) {
-      application = await captainRegistration(b, 'save', fields());
-      final file = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 2000,
-        maxHeight: 2000,
-        imageQuality: 90,
-        requestFullMetadata: false,
-      );
-      if (file != null) await upload(slot, file);
-      return;
-    }
+    if (kIsWeb) throw StateError('التسجيل بالكاميرا متاح من تطبيق الهاتف');
     application = await captainRegistration(b, 'save', {
       ...fields(),
       'pending_slot': slot,
@@ -237,6 +235,7 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
           builder: (_) => CapturePage(
             title: captainDocumentLabels[slot] ?? 'صورة المستمسك',
             face: slot == 'selfie',
+            directCapture: true,
           ),
         ),
       );
@@ -254,12 +253,14 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
   });
   Future<void> next() async {
     await run(() async {
-      if (step == 0) {
+      if (step == -1) {
+        application = await captainRegistration(b, 'save', fields());
+      } else if (step == 0) {
         if (name.text.trim().split(RegExp(r'\s+')).length < 3)
           throw StateError('FULL_NAME_REQUIRED');
         if (province.text.trim().isEmpty || area.text.trim().isEmpty)
           throw StateError('AREA_REQUIRED');
-      } else if (documents[step == 1 ? 'id_front' : 'id_back'] == null)
+      } else if (documents[slots[step - 1]] == null)
         throw StateError('DOCUMENTS_REQUIRED');
       application = await captainRegistration(b, 'save', fields());
       if (mounted) setState(() => step++);
@@ -267,7 +268,7 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
   }
 
   void submit() => run(() async {
-    if (documents['id_front'] == null || documents['id_back'] == null)
+    if (slots.any((slot) => documents[slot] == null))
       throw StateError('DOCUMENTS_REQUIRED');
     application = await captainRegistration(b, 'save', fields());
     application = await captainRegistration(b, 'submit');
@@ -395,10 +396,48 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
                       ),
                     ),
                   AppText(
-                    'الخطوة ${step + 1} من 4',
+                    step < 0
+                        ? 'اختر نظام العمل'
+                        : 'الخطوة ${step + 1} من ${reviewStep + 1}',
                     style: const TextStyle(color: muted),
                   ),
                   const SizedBox(height: 16),
+                  if (step == -1) ...[
+                    ListTile(
+                      leading: Icon(
+                        plan == 'commission'
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color: scarlet,
+                      ),
+                      selected: plan == 'commission',
+                      onTap: busy
+                          ? null
+                          : () => setState(() => plan = 'commission'),
+                      title: const AppText('نظام النسبة'),
+                      subtitle: AppText(
+                        'بدون اشتراك أسبوعي. عمولة الشركة ${b.commerce['commission_percent'] ?? 20}% من أجرة الرحلة أو توصيل الطعام. لا يشمل الخطوط.',
+                      ),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        plan == 'weekly'
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color: scarlet,
+                      ),
+                      selected: plan == 'weekly',
+                      onTap: busy
+                          ? null
+                          : () => setState(() => plan = 'weekly'),
+                      title: const AppText('الاشتراك الأسبوعي — 5,000 دينار'),
+                      subtitle: AppText(
+                        widget.vehicle == 'bike'
+                            ? 'توصيل الطعام بدون عمولة على أجرة التوصيل.'
+                            : 'تكسي وخطوط مدارس وعمل وتوصيل مطاعم، بدون عمولة على الأجرة.',
+                      ),
+                    ),
+                  ],
                   if (step == 0) ...[
                     field('الاسم الكامل', name),
                     DropdownButtonFormField<String>(
@@ -423,9 +462,8 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
                     field('المنطقة', area),
                   ],
                   if (step == 2) const FlipCardHint(),
-                  if (step == 1 || step == 2)
-                    photo(step == 1 ? 'id_front' : 'id_back'),
-                  if (step == 3) ...[
+                  if (step > 0 && step < reviewStep) photo(slots[step - 1]),
+                  if (step == reviewStep) ...[
                     PaperCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -434,7 +472,7 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
                           AppText('${province.text} — ${area.text}'),
                           const SizedBox(height: 12),
                           const AppText(
-                            'سيتم إرسال بياناتك وصورتي الجنسية للإدارة لمراجعة طلب تسجيلك.',
+                            'سيتم إرسال بياناتك والمستمسكات للإدارة لمراجعة طلب تسجيلك.',
                           ),
                         ],
                       ),
@@ -443,7 +481,7 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
                   const SizedBox(height: 24),
                   Row(
                     children: [
-                      if (step > 0)
+                      if (step >= 0)
                         Expanded(
                           child: OutlinedButton(
                             onPressed: busy
@@ -452,15 +490,17 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
                             child: const AppText('السابق'),
                           ),
                         ),
-                      if (step > 0) const SizedBox(width: 12),
+                      if (step >= 0) const SizedBox(width: 12),
                       Expanded(
                         child: FilledButton(
                           onPressed: busy
                               ? null
-                              : step == 3
+                              : step == reviewStep
                               ? submit
                               : next,
-                          child: AppText(step == 3 ? 'إرسال الطلب' : 'التالي'),
+                          child: AppText(
+                            step == reviewStep ? 'إرسال الطلب' : 'التالي',
+                          ),
                         ),
                       ),
                     ],

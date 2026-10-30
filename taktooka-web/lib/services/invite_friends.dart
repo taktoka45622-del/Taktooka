@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/app_notice.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -34,9 +35,7 @@ Future<void> inviteFriends(BuildContext context) async {
               await Clipboard.setData(ClipboardData(text: message));
               if (ctx.mounted) Navigator.pop(ctx);
               if (context.mounted)
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: AppText('تم نسخ رسالة الدعوة')),
-                );
+                showAppNotice(context, 'تم نسخ رسالة الدعوة');
             },
           ),
           ListTile(
@@ -49,12 +48,9 @@ Future<void> inviteFriends(BuildContext context) async {
               );
               if (ctx.mounted) Navigator.pop(ctx);
               if (!opened && context.mounted)
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: AppText(
-                      'تعذر فتح واتساب؛ استخدم نسخ رسالة الدعوة',
-                    ),
-                  ),
+                showAppNotice(
+                  context,
+                  'تعذر فتح واتساب؛ استخدم نسخ رسالة الدعوة',
                 );
             },
           ),

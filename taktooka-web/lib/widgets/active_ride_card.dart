@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:taktooka/services/map_navigation.dart';
 
 import 'package:taktooka/core/design.dart';
 import 'package:taktooka/core/ride_emergency.dart';
@@ -81,7 +81,9 @@ class ActiveRideCard extends StatelessWidget {
                 child: AppText(
                   ride['coupon_reward_type'] == 'free_ride'
                       ? 'رحلة مجانية — بدون دفع كروة'
-                      : wallet ? 'الرحلة مدفوعة بالمحفظة' : 'الدفع كاش عند الوصول',
+                      : wallet
+                      ? 'الرحلة مدفوعة بالمحفظة'
+                      : 'الدفع كاش عند الوصول',
                   style: heading(15).copyWith(color: scarlet),
                 ),
               ),
@@ -415,32 +417,35 @@ class ActiveRideCard extends StatelessWidget {
             ['accepted', 'arrived', 'in_progress'].contains(state)) ...[
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: () async {
+            onPressed: () {
               final uri = rideWazeUri(ride);
-              if (uri == null) return;
-              final messenger = ScaffoldMessenger.of(context);
-              try {
-                if (!await launchUrl(
-                  uri,
-                  mode: LaunchMode.externalApplication,
-                )) {
-                  messenger.showSnackBar(
-                    const SnackBar(content: AppText('تعذّر فتح ويز')),
-                  );
-                }
-              } catch (_) {
-                messenger.showSnackBar(
-                  const SnackBar(content: AppText('تعذّر فتح ويز')),
+              final point = uri?.queryParameters['ll']?.split(',');
+              if (point != null)
+                MapNavigation.open(
+                  context,
+                  double.parse(point[0]),
+                  double.parse(point[1]),
                 );
-              }
+            },
+            onLongPress: () {
+              final point = rideWazeUri(
+                ride,
+              )?.queryParameters['ll']?.split(',');
+              if (point != null)
+                MapNavigation.open(
+                  context,
+                  double.parse(point[0]),
+                  double.parse(point[1]),
+                  choose: true,
+                );
             },
             icon: const Icon(Icons.navigation_outlined),
             label: AppText(
               state == 'in_progress'
                   ? stage == 'returning'
-                        ? 'ويز للرجعة'
-                        : 'ويز للوجهة'
-                  : 'ويز للزبون',
+                        ? 'الملاحة للرجعة'
+                        : 'الملاحة للوجهة'
+                  : 'الملاحة للزبون',
             ),
           ),
           const SizedBox(height: 8),

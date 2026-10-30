@@ -31,6 +31,8 @@ import 'package:taktooka/widgets/brand_title.dart';
 
 class PreviewBackend extends Backend {
   @override
+  Future<Position> locatePrecise() => locate(fresh: true);
+  @override
   Future<Position> locate({bool fresh = false}) async => Position(
     latitude: 33.34,
     longitude: 44.401,

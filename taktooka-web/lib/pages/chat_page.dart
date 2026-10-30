@@ -41,12 +41,12 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     load();
-    timer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) {
-        if (mounted && ModalRoute.of(context)?.isCurrent == true && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) unawaited(_loadGate.run((_) => _loadOnce(), queue: false));
-      },
-    );
+    timer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (mounted &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed)
+        unawaited(_loadGate.run((_) => _loadOnce(), queue: false));
+    });
     channel = widget.b.db
         .channel(
           'tkt-chat-${widget.room ?? widget.b.db.auth.currentUser?.id}-${const Uuid().v4()}',

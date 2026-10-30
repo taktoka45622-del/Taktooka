@@ -1,0 +1,35 @@
+begin;
+do $test$
+declare admin_id uuid:=gen_random_uuid(); customer uuid:=gen_random_uuid(); ident uuid:=gen_random_uuid(); big_id uuid:=gen_random_uuid(); expiry timestamptz:=now()+interval '7 days'; result jsonb; repeated jsonb; codes jsonb; denied boolean;
+begin
+ insert into auth.users(id,email)values(admin_id,admin_id||'@example.invalid'),(customer,customer||'@example.invalid');
+ insert into public.tkt_profiles(user_id,name,phone)values(admin_id,'QA large cards','07000000007'),(customer,'QA reader','07000000008');
+ insert into public.tkt_admins(user_id)values(admin_id);
+ perform set_config('request.jwt.claim.sub',admin_id::text,true);
+ result:=public.tkt_coupon_cards('start',jsonb_build_object('id',ident,'count',1001,'expires_at',expiry));
+ if (result->>'card_count')::integer<>1001 or (result->>'generated_count')::integer<>0 then raise exception 'TEST_LARGE_START';end if;
+ result:=public.tkt_coupon_cards('fill',jsonb_build_object('id',ident,'after',0));
+ if (result->>'generated_count')::integer<>500 then raise exception 'TEST_CHUNK_SIZE';end if;
+ repeated:=public.tkt_coupon_cards('fill',jsonb_build_object('id',ident,'after',0));
+ if (repeated->>'generated_count')::integer<>500 then raise exception 'TEST_CHUNK_RETRY';end if;
+ repeated:=public.tkt_coupon_cards('start',jsonb_build_object('id',ident,'count',1001,'expires_at',expiry));
+ if (repeated->>'generated_count')::integer<>500 then raise exception 'TEST_RESUME';end if;
+ result:=public.tkt_coupon_cards('fill',jsonb_build_object('id',ident,'after',500));
+ result:=public.tkt_coupon_cards('fill',jsonb_build_object('id',ident,'after',1000));
+ if (result->>'generated_count')::integer<>1001 then raise exception 'TEST_FINAL_SIZE';end if;
+ if (select count(*) from tkt_private.coupons where batch_id=ident)<>1001 or (select count(distinct code) from tkt_private.coupons where batch_id=ident)<>1001 then raise exception 'TEST_NO_DUPLICATES';end if;
+ if exists(select 1 from tkt_private.coupons where batch_id=ident and (max_uses<>1 or code !~ '^[0-9]{10}$')) then raise exception 'TEST_SINGLE_USE';end if;
+ result:=public.tkt_coupon_cards('get_page',jsonb_build_object('id',ident,'offset',0,'limit',600));
+ repeated:=public.tkt_coupon_cards('get_page',jsonb_build_object('id',ident,'offset',600,'limit',600));
+ if jsonb_array_length(result->'codes')<>600 or jsonb_array_length(repeated->'codes')<>401 then raise exception 'TEST_PAGINATION';end if;
+ if exists(select 1 from jsonb_array_elements_text(result->'codes') a(code) join jsonb_array_elements_text(repeated->'codes') b(code) using(code)) then raise exception 'TEST_PAGE_DUPLICATES';end if;
+ result:=public.tkt_coupon_cards('start',jsonb_build_object('id',big_id,'count',100000,'expires_at',expiry));
+ if (result->>'card_count')::integer<>100000 then raise exception 'TEST_100000_ACCEPTED';end if;
+ denied:=false;begin perform public.tkt_coupon_cards('start',jsonb_build_object('id',gen_random_uuid(),'count',100001,'expires_at',expiry));exception when others then if sqlerrm='INVALID_CARD_BATCH' then denied:=true;else raise;end if;end;
+ if not denied then raise exception 'TEST_SAFE_BOUND';end if;
+ perform set_config('request.jwt.claim.sub',customer::text,true);
+ denied:=false;begin perform public.tkt_coupon_cards('fill',jsonb_build_object('id',ident,'after',1001));exception when others then if sqlerrm='PERMISSION_DENIED' then denied:=true;else raise;end if;end;
+ if not denied then raise exception 'TEST_PERMISSION';end if;
+end $test$;
+select '1001 unique vouchers generated, retries/resume/pagination verified, 100000 accepted and authorization enforced' as checks;
+rollback;

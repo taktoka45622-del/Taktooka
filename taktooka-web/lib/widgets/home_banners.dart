@@ -147,6 +147,7 @@ class _BannerCarouselState extends State<BannerCarousel>
     '$supabaseUrl/storage/v1/object/public/taktooka-banners/${row['image_path']}',
     key: ValueKey<String>(row['image_path'] as String),
     fit: BoxFit.cover,
+    cacheWidth: 1080,
     semanticLabel: (row['title'] as String?)?.isNotEmpty == true
         ? row['title']
         : null,

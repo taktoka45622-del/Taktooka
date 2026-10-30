@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/app_notice.dart';
 import 'package:flutter/material.dart';
 
 import 'package:taktooka/core/app_preferences.dart';
@@ -29,11 +30,7 @@ class PreferencesPanel extends StatelessWidget {
                 await appPreferences.setLanguage(values.single);
               } catch (_) {
                 if (context.mounted)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: AppText('تعذّر حفظ الإعدادات، أعد المحاولة'),
-                    ),
-                  );
+                  showAppNotice(context, 'تعذّر حفظ الإعدادات، أعد المحاولة');
               }
             },
           ),
@@ -64,11 +61,7 @@ class PreferencesPanel extends StatelessWidget {
                 await appPreferences.setTheme(values.single);
               } catch (_) {
                 if (context.mounted)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: AppText('تعذّر حفظ الإعدادات، أعد المحاولة'),
-                    ),
-                  );
+                  showAppNotice(context, 'تعذّر حفظ الإعدادات، أعد المحاولة');
               }
             },
           ),

@@ -23,7 +23,12 @@ class _RecoveryInboxState extends State<RecoveryInbox> {
   void initState() {
     super.initState();
     load();
-    timer = Timer.periodic(const Duration(seconds: 5), (_) { if (mounted && ModalRoute.of(context)?.isCurrent == true && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) unawaited(load()); });
+    timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed)
+        unawaited(load());
+    });
   }
 
   @override

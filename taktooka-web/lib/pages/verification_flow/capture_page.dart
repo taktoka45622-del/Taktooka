@@ -45,7 +45,13 @@ Future<bool> validPersonalPhoto(XFile file) async {
 class CapturePage extends StatefulWidget {
   final String title;
   final bool face;
-  const CapturePage({super.key, required this.title, this.face = false});
+  final bool directCapture;
+  const CapturePage({
+    super.key,
+    required this.title,
+    this.face = false,
+    this.directCapture = false,
+  });
   @override
   State<CapturePage> createState() => _CapturePageState();
 }
@@ -228,7 +234,9 @@ class _CapturePageState extends State<CapturePage> with WidgetsBindingObserver {
       final file = await c.takePicture();
       if (!mounted) return;
       CaptureResult? result;
-      if (widget.face) {
+      if (widget.directCapture && !widget.face) {
+        result = CaptureResult(file, {});
+      } else if (widget.face) {
         if (!await validPersonalPhoto(file)) throw StateError('FACE_REQUIRED');
         result = CaptureResult(file, check.report());
       } else {

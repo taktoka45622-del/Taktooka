@@ -5,7 +5,9 @@ import 'package:taktooka/core/gender_copy.dart';
 class BrandTitle extends StatelessWidget {
   const BrandTitle({super.key});
   @override
-  Widget build(BuildContext context) => Row(
+  Widget build(BuildContext context) => FittedBox(
+    fit: BoxFit.scaleDown,
+    child: Row(
     mainAxisSize: MainAxisSize.min,
     children: [
       const AppText(
@@ -19,5 +21,6 @@ class BrandTitle extends StatelessWidget {
       const SizedBox(width: 4),
       Image.asset('assets/brand.png', cacheWidth: 144, height: 40, width: 48),
     ],
+    ),
   );
 }
