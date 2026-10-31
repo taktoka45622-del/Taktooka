@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/food_order_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:taktooka/core/design.dart';
@@ -6,7 +7,8 @@ import 'package:taktooka/services/backend.dart';
 import 'package:taktooka/widgets/booking_map_layer.dart';
 import 'package:taktooka/widgets/commerce_ui.dart';
 
-class FoodCheckoutPage extends StatelessWidget {
+class FoodCheckoutPage extends StatefulWidget {
+  final void Function(int, int)? onQuantityChanged;
   final Json restaurant;
   final List<Json> items;
   final AddressChoice place;
@@ -15,12 +17,36 @@ class FoodCheckoutPage extends StatelessWidget {
   const FoodCheckoutPage({
     super.key,
     required this.restaurant,
+    this.onQuantityChanged,
     required this.items,
     required this.place,
     required this.delivery,
     required this.serviceFee,
     required this.photo,
   });
+  @override
+  State<FoodCheckoutPage> createState() => _FoodCheckoutPageState();
+}
+
+class _FoodCheckoutPageState extends State<FoodCheckoutPage> {
+  late final List<Json> items = [for (final i in widget.items) Json.from(i)];
+  Json get restaurant => widget.restaurant;
+  AddressChoice get place => widget.place;
+  num get delivery => widget.delivery;
+  num get serviceFee => widget.serviceFee;
+  Widget photo(dynamic path, {double height = 100}) =>
+      widget.photo(path, height: height);
+  void quantity(int index, int value) {
+    widget.onQuantityChanged?.call(index, value);
+    setState(() {
+      if (value == 0) {
+        items.removeAt(index);
+      } else {
+        items[index] = {...items[index], 'quantity': value};
+      }
+    });
+  }
+
   num get subtotal => items.fold<num>(
     0,
     (s, i) => s + (i['price'] as num) * (i['quantity'] as num),
@@ -57,33 +83,53 @@ class FoodCheckoutPage extends StatelessWidget {
             ),
           ),
         ),
-        for (final i in items)
+        for (var index = 0; index < items.length; index++)
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Row(
+              child: Column(
                 children: [
-                  SizedBox(
-                    width: 95,
-                    child: photo(i['image_path'], height: 95),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(i['name'] ?? '', style: heading(18)),
-                        Text('الكمية: ${i['quantity']}'),
-                        Text(
-                          money((i['price'] as num) * (i['quantity'] as num)),
-                          style: heading(18),
+                  FoodOrderItem(item: items[index], photo: photo),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        tooltip: 'حذف الوجبة من السلة',
+                        onPressed: () => quantity(index, 0),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                      IconButton(
+                        tooltip: 'تقليل الكمية',
+                        onPressed: () => quantity(
+                          index,
+                          (items[index]['quantity'] as int) - 1,
                         ),
-                      ],
-                    ),
+                        icon: const Icon(Icons.remove_circle_outline),
+                      ),
+                      Text('${items[index]['quantity']}'),
+                      IconButton(
+                        tooltip: 'زيادة الكمية',
+                        onPressed: (items[index]['quantity'] as int) < 99
+                            ? () => quantity(
+                                index,
+                                (items[index]['quantity'] as int) + 1,
+                              )
+                            : null,
+                        icon: const Icon(
+                          Icons.add_circle_outline,
+                          color: scarlet,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
+          ),
+        if (items.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(20),
+            child: Text('سلتك فارغة، ارجع واختر وجبتك'),
           ),
         Card(
           child: Padding(
@@ -187,7 +233,7 @@ class FoodCheckoutPage extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         FilledButton(
-          onPressed: () => Navigator.pop(context, true),
+          onPressed: items.isEmpty ? null : () => Navigator.pop(context, true),
           child: const Text('تأكيد الطلب'),
         ),
         const SizedBox(height: 12),

@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/favorite_restaurants.dart';
 import 'package:flutter/material.dart';
 
 import 'captain_service_preferences.dart';
@@ -220,8 +221,9 @@ class HomePage extends StatelessWidget {
                   context,
                   Icons.restaurant,
                   b.captain ? 'طلبات الطعام' : 'طعام',
-                  () => Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (_) => FoodPage(b: b))),
+                  () => Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => FoodPage(b: b))),
                   scarlet,
                   locked:
                       b.captain &&
@@ -238,6 +240,17 @@ class HomePage extends StatelessWidget {
                   ),
               ],
             ),
+            if (!b.captain && b.commerce['restaurant'] == null)
+              HomeFavoriteRestaurants(
+                b: b,
+                open: (r) async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => FoodPage(b: b, initialRestaurant: r),
+                    ),
+                  );
+                },
+              ),
             const SizedBox(height: 12),
             if (!b.captain)
               BannerCarousel(
@@ -265,8 +278,9 @@ class HomePage extends StatelessWidget {
                           children: [
                             AppText(
                               'مشوارك أسهل',
-                              style: heading(28 * scale)
-                                  .copyWith(color: Colors.white),
+                              style: heading(
+                                28 * scale,
+                              ).copyWith(color: Colors.white),
                             ),
                             const SizedBox(height: 6),
                             Container(

@@ -1,3 +1,4 @@
+import 'favorite_restaurants.dart';
 import 'package:flutter/material.dart';
 import 'package:taktooka/core/design.dart';
 import 'package:taktooka/services/backend.dart';
@@ -14,6 +15,9 @@ const foodCatalogCategories = [
 
 class FoodDiscovery extends StatelessWidget {
   final List<Json> restaurants, meals;
+  final List<Json> favorites;
+  final bool Function(Json)? isFavorite;
+  final ValueChanged<Json>? toggleFavorite;
   final String selectedCategory, area;
   final bool offers, locating;
   final ValueChanged<String> search, category;
@@ -24,6 +28,9 @@ class FoodDiscovery extends StatelessWidget {
   const FoodDiscovery({
     super.key,
     required this.restaurants,
+    this.favorites = const [],
+    this.isFavorite,
+    this.toggleFavorite,
     required this.meals,
     required this.selectedCategory,
     required this.area,
@@ -70,6 +77,11 @@ class FoodDiscovery extends StatelessWidget {
       ),
       const SizedBox(height: 16),
       banner,
+      FavoriteRestaurants(
+        restaurants: favorites,
+        open: openRestaurant,
+        photo: photo,
+      ),
       const SizedBox(height: 16),
       SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -179,7 +191,26 @@ class FoodDiscovery extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(shop['name'] ?? '', style: heading(20)),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(shop['name'] ?? '', style: heading(20)),
+                          ),
+                          if (toggleFavorite != null)
+                            IconButton(
+                              tooltip: isFavorite?.call(shop) == true
+                                  ? 'إزالة من المفضلة'
+                                  : 'حفظ المطعم',
+                              onPressed: () => toggleFavorite!(shop),
+                              icon: Icon(
+                                isFavorite?.call(shop) == true
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
+                                color: scarlet,
+                              ),
+                            ),
+                        ],
+                      ),
                       Text(
                         shop['description'] ?? '',
                         style: const TextStyle(color: Colors.grey),

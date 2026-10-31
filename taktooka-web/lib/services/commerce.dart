@@ -26,6 +26,8 @@ Future<dynamic> commerceRpc(Backend b, String action, [Json data = const {}]) {
     'catalog',
     'categories',
     'food_quote',
+    'favorites',
+    'category_options',
   };
   return reads.contains(action) ? retryNetworkRead(request) : request();
 }
@@ -46,6 +48,10 @@ String commerceError(Object e) {
     'OFFER_EXPIRED': 'الطلب لم يعد متاحاً',
     'CAPTAIN_BUSY': 'عندك طلب جارٍ؛ أكمله أولاً',
     'IMAGE_LIMIT': 'يمكن إضافة 10 صور فقط لكل وجبة',
+    'INVALID_OPTIONS':'تغيّرت خيارات الوجبة أو أسعارها؛ افتح الوجبة وراجع اختياراتك',
+    'INVALID_QUANTITY':'الكمية المسموحة من 1 إلى 99 لكل اختيار',
+    'BASKET_LIMIT':'وصلت للحد الأقصى لوجبات السلة',
+    'CART_RESTAURANT_CONFLICT':'السلة خاصة بمطعم واحد فقط',
     'INVALID_PRICE': 'تحقق من السعر الحالي والسعر السابق',
     'FIELDS_REQUIRED': 'أكمل جميع المعلومات وحدد الموقع',
     'PERMISSION_DENIED': 'ما عندك صلاحية لهذه العملية',

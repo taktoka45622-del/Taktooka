@@ -1,3 +1,5 @@
+import 'package:taktooka/pages/meal_details_page.dart';
+import 'package:taktooka/widgets/favorite_restaurants.dart';
 import 'package:image/image.dart' as raster;
 import 'package:taktooka/services/persistent_map_client.dart';
 import 'package:taktooka/pages/home_page.dart';
@@ -39,6 +41,9 @@ import 'map_test_support.dart';
 const actor = '11111111-1111-4111-8111-111111111111';
 const shopId = '22222222-2222-4222-8222-222222222222';
 var role = 'owner';
+List<Json> savedFavorites = [];
+List<Json> savedTemplate = [];
+Json? savedMeal;
 final shop = <String, dynamic>{
   'id': shopId,
   'owner_id': actor,
@@ -196,6 +201,8 @@ void main() {
             'restaurants' => [shop],
             'menu' => [meal],
             'categories' => ['بركر', 'بيتزا'],
+            'category_options' => {'addons': savedTemplate},
+            'favorites' => savedFavorites,
             'catalog' => [],
             'accounts' => {
               'statistics': [],
@@ -226,6 +233,14 @@ void main() {
         }
         if (request.body.isNotEmpty && request.url.path.contains('/rpc/')) {
           final p = jsonDecode(request.body) as Map;
+          if (p['p_action'] == 'favorite_set') {
+            savedFavorites = p['p_data']['saved'] == true ? [shop] : [];
+            data = {'saved': p['p_data']['saved']};
+          }
+          if (p['p_action'] == 'item_save') {
+            savedMeal = Json.from(p['p_data']);
+            data = savedMeal;
+          }
           if (p['p_action'] == 'restaurant_open') {
             shop['open'] = p['p_data']['open'];
             data = {...shop};
@@ -338,6 +353,8 @@ void main() {
           'courier',
           'private',
           'meal',
+          'meal_details',
+          'favorites',
           'settings',
           'couriers',
           'plans',
@@ -382,6 +399,47 @@ void main() {
               'registration' => RegistrationChoicePage(b: b),
               'customer_details' => FoodOrderDetailsPage(b: b, initial: order),
               'meal' => MealEditorPage(b: b, meal: meal),
+              'meal_details' => MealDetailsPage(
+                meal: {
+                  ...meal,
+                  'options': {
+                    'sizes': [
+                      {'id': 'normal', 'name': 'عادي', 'price': 25000},
+                      {'id': 'double', 'name': 'دبل لحم وجبنة', 'price': 30000},
+                    ],
+                    'addons': [
+                      {
+                        'id': 'cheese',
+                        'name': 'جبن إضافي وصوص خاص بالوجبة',
+                        'price': 1000,
+                        'image_path': 'cheese.jpg',
+                      },
+                    ],
+                  },
+                },
+                restaurant: shop,
+                favorite: true,
+                toggleFavorite: () async => false,
+                photo: (dynamic path, {double height = 100}) =>
+                    SizedBox(height: height, child: const Icon(Icons.fastfood)),
+              ),
+              'favorites' => Scaffold(
+                body: ListView(
+                  children: [
+                    FavoriteRestaurants(
+                      restaurants: [
+                        shop,
+                        {...shop, 'id': 'two'},
+                      ],
+                      open: (_) {},
+                      photo: (dynamic path, {double height = 100}) => SizedBox(
+                        height: height,
+                        child: const Icon(Icons.restaurant),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               'settings' => RestaurantSettingsPage(b: b, restaurant: shop),
               'couriers' => RestaurantCouriersPage(b: b, enabled: true),
               'plans' => CaptainRegistrationPage(backend: b),
@@ -599,6 +657,251 @@ void main() {
       await close(tester, b);
     }
   });
+  testWidgets(
+    'meal extras update the unit and quantity total and return images',
+    (tester) async {
+      role = 'customer';
+      final b = PreviewBackend()
+        ..profile = {'captain': false}
+        ..commerce = responseMe;
+      try {
+        final mealWithOptions = {
+          ...meal,
+          'price': 6000,
+          'options': {
+            'sizes': [
+              {'id': 'normal', 'name': 'عادي', 'price': 6000},
+              {'id': 'double', 'name': 'دبل', 'price': 8000},
+            ],
+            'addons': [
+              {
+                'id': 'cheese',
+                'name': 'جبن إضافي',
+                'price': 1000,
+                'image_path': 'cheese.jpg',
+              },
+            ],
+          },
+        };
+        Json? result;
+        await open(
+          tester,
+          Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async {
+                  result = await Navigator.push<Json>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MealDetailsPage(
+                        meal: mealWithOptions,
+                        restaurant: shop,
+                        favorite: false,
+                        toggleFavorite: () async => true,
+                        photo: (dynamic p, {double height = 100}) => SizedBox(
+                          height: height,
+                          child: const Icon(Icons.fastfood),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('فتح الوجبة'),
+              ),
+            ),
+          ),
+          const Size(390, 844),
+          1,
+        );
+        await tester.tap(find.text('فتح الوجبة'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('دبل'));
+        await tester.tap(find.text('دبل'));
+        await tester.pump();
+        await tester.ensureVisible(find.text('جبن إضافي'));
+        await tester.tap(find.text('جبن إضافي'));
+        await tester.pump();
+        await tester.tap(find.byTooltip('زيادة الكمية'));
+        await tester.pump();
+        expect(find.text('أضف للسلة — 18,000 د.ع'), findsOneWidget);
+        await tester.tap(find.text('أضف للسلة — 18,000 د.ع'));
+        await tester.pumpAndSettle();
+        expect(result?['price'], 9000);
+        expect(result?['quantity'], 2);
+        expect(result?['addons'][0]['image_path'], 'cheese.jpg');
+        expect(result?['image_path'], 'meal.jpg');
+        expect(tester.takeException(), isNull);
+      } finally {
+        await close(tester, b);
+      }
+    },
+  );
+  testWidgets(
+    'favorites can be saved opened and removed from the customer home',
+    (tester) async {
+      role = 'customer';
+      savedFavorites = [];
+      final b = PreviewBackend()
+        ..profile = {'captain': false}
+        ..commerce = responseMe;
+      try {
+        await open(tester, FoodPage(b: b), const Size(390, 844), 1);
+        await tester.ensureVisible(find.byTooltip('حفظ المطعم'));
+        await tester.tap(find.byTooltip('حفظ المطعم'));
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 80)),
+        );
+        await tester.pump();
+        expect(find.text('المطاعم المفضلة'), findsOneWidget);
+        final favorite = find
+            .descendant(
+              of: find.byType(FavoriteRestaurants),
+              matching: find.byType(InkWell),
+            )
+            .first;
+        await tester.ensureVisible(favorite);
+        await tester.tap(favorite);
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 80)),
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(find.text('كل المطاعم'), findsOneWidget);
+        await tester.ensureVisible(find.byTooltip('إزالة من المفضلة'));
+        await tester.tap(find.byTooltip('إزالة من المفضلة'));
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 80)),
+        );
+        await tester.pump();
+        expect(savedFavorites, isEmpty);
+        await tester.ensureVisible(find.text('كل المطاعم'));
+        await tester.tap(find.text('كل المطاعم'));
+        await tester.pump();
+        expect(find.text('المطاعم المفضلة'), findsNothing);
+        expect(tester.takeException(), isNull);
+      } finally {
+        savedFavorites = [];
+        await close(tester, b);
+      }
+    },
+  );
+  testWidgets(
+    'cart shows meal and addon pictures and recalculates quantities',
+    (tester) async {
+      final b = PreviewBackend();
+      int? changed;
+      final images = <String>[];
+      try {
+        final item = {
+          ...meal,
+          'price': 7000,
+          'quantity': 2,
+          'addons': [
+            {
+              'id': 'cheese',
+              'name': 'جبن إضافي',
+              'price': 1000,
+              'image_path': 'cheese.jpg',
+            },
+          ],
+        };
+        await open(
+          tester,
+          FoodCheckoutPage(
+            restaurant: shop,
+            items: [item],
+            place: const AddressChoice('عنوان اختبار', LatLng(33.55, 44.42)),
+            delivery: 1500,
+            serviceFee: 500,
+            onQuantityChanged: (_, q) => changed = q,
+            photo: (dynamic p, {double height = 100}) {
+              images.add('$p');
+              return SizedBox(
+                height: height,
+                child: const Icon(Icons.fastfood),
+              );
+            },
+          ),
+          const Size(390, 844),
+          1,
+        );
+        expect(images, containsAll(['meal.jpg', 'cheese.jpg']));
+        expect(find.text('جبن إضافي'), findsNothing);
+        expect(find.text('+ جبن إضافي'), findsOneWidget);
+        await tester.ensureVisible(find.byTooltip('تقليل الكمية'));
+        await tester.tap(find.byTooltip('تقليل الكمية'));
+        await tester.pump();
+        expect(changed, 1);
+        expect(find.text('7,000 د.ع'), findsWidgets);
+        await tester.ensureVisible(
+          find.widgetWithText(FilledButton, 'تأكيد الطلب'),
+        );
+        expect(find.text('9,000 د.ع'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await close(tester, b);
+      }
+    },
+  );
+  testWidgets(
+    'owner inherits category addon image and saves it with the meal',
+    (tester) async {
+      role = 'owner';
+      savedTemplate = [
+        {
+          'id': 'olive',
+          'name': 'زيتون إضافي',
+          'price': 750,
+          'image_path': 'olive.jpg',
+        },
+      ];
+      savedMeal = null;
+      final b = PreviewBackend()
+        ..profile = {'captain': false}
+        ..commerce = responseMe;
+      try {
+        await open(
+          tester,
+          MealEditorPage(b: b, meal: {...meal, 'previous_price': null}),
+          const Size(390, 844),
+          1,
+        );
+        await tester.ensureVisible(
+          find.byType(DropdownButtonFormField<String>).first,
+        );
+        await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('بيتزا').last);
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 80)),
+        );
+        await tester.pump();
+        expect(find.text('زيتون إضافي'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.text('حفظ الوجبة'),
+          250,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.tap(find.text('حفظ الوجبة'));
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 80)),
+        );
+        await tester.pump();
+        expect(savedMeal?['category'], 'بيتزا');
+        expect(savedMeal?['save_category_addons'], false);
+        expect(savedMeal?['options']['addons'][0]['image_path'], 'olive.jpg');
+        expect(tester.takeException(), isNull);
+      } finally {
+        savedTemplate = [];
+        await close(tester, b);
+      }
+    },
+  );
   testWidgets('capture loaded commerce screens', (tester) async {
     role = 'owner';
     final b = PreviewBackend()
@@ -612,6 +915,39 @@ void main() {
       ('restaurant-dashboard', FoodPage(b: b)),
       ('customer-home', FoodPage(b: b)),
       ('customer-tracking', FoodOrderDetailsPage(b: b, initial: order)),
+      (
+        'meal-details',
+        MealDetailsPage(
+          meal: {
+            ...meal,
+            'options': {
+              'sizes': [
+                {'id': 'normal', 'name': 'عادي', 'price': 25000},
+                {'id': 'double', 'name': 'دبل', 'price': 30000},
+              ],
+              'addons': [
+                {
+                  'id': 'cheese',
+                  'name': 'جبن إضافي',
+                  'price': 1000,
+                  'image_path': 'cheese.jpg',
+                },
+                {
+                  'id': 'fries',
+                  'name': 'بطاطا',
+                  'price': 1500,
+                  'image_path': 'fries.jpg',
+                },
+              ],
+            },
+          },
+          restaurant: shop,
+          favorite: true,
+          toggleFavorite: () async => false,
+          photo: (dynamic path, {double height = 100}) =>
+              SizedBox(height: height, child: const Icon(Icons.fastfood)),
+        ),
+      ),
       ('registration', RegistrationChoicePage(b: b)),
       (
         'checkout',

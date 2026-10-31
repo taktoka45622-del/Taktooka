@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/food_options_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:taktooka/core/design.dart';
 import 'package:taktooka/services/backend.dart';
@@ -22,10 +23,14 @@ class _MealEditorPageState extends State<MealEditorPage> {
   String? error;
   List<String> categories = [];
   String? catalogCategory;
+  List<Json> sizes = [], addons = [];
+  bool saveCategoryAddons = true, optionsLoading = false;
+  int optionsGeneration = 0;
   @override
   void initState() {
     super.initState();
     final m = widget.meal ?? {};
+    saveCategoryAddons = widget.meal == null;
     name = TextEditingController(text: m['name'] ?? '');
     description = TextEditingController(text: m['description'] ?? '');
     price = TextEditingController(text: m['price']?.toString() ?? '');
@@ -36,6 +41,10 @@ class _MealEditorPageState extends State<MealEditorPage> {
     if (images.isEmpty && (m['image_path'] ?? '').toString().isNotEmpty)
       images.add(m['image_path']);
     category = m['category'] ?? 'أخرى';
+    sizes = Backend.rows((m['options'] as Map?)?['sizes'] ?? []);
+    addons = Backend.rows((m['options'] as Map?)?['addons'] ?? []);
+    if (widget.meal == null) loadCategoryOptions();
+    catalogCategory = m['catalog_category'];
     discounted = m['previous_price'] != null;
     available = m['available'] ?? true;
     sort = (m['sort_order'] as num? ?? 0).toInt();
@@ -51,6 +60,25 @@ class _MealEditorPageState extends State<MealEditorPage> {
         );
     } catch (e) {
       if (mounted) setState(() => error = commerceError(e));
+    }
+  }
+
+  Future<void> loadCategoryOptions() async {
+    final generation = ++optionsGeneration, target = category;
+    setState(() => optionsLoading = true);
+    try {
+      final value = Json.from(
+        await commerceRpc(widget.b, 'category_options', {'category': target})
+            as Map,
+      );
+      if (mounted && generation == optionsGeneration)
+        setState(() => addons = Backend.rows(value['addons'] ?? []));
+    } catch (e) {
+      if (mounted && generation == optionsGeneration)
+        setState(() => error = commerceError(e));
+    } finally {
+      if (mounted && generation == optionsGeneration)
+        setState(() => optionsLoading = false);
     }
   }
 
@@ -89,6 +117,7 @@ class _MealEditorPageState extends State<MealEditorPage> {
           categories = {...categories, v}.toList();
           category = v;
         });
+      await loadCategoryOptions();
     } catch (e) {
       if (mounted) setState(() => error = commerceError(e));
     }
@@ -164,7 +193,8 @@ class _MealEditorPageState extends State<MealEditorPage> {
   }
 
   Future<void> save() async {
-    if (saving || uploading || !form.currentState!.validate()) return;
+    if (saving || uploading || optionsLoading || !form.currentState!.validate())
+      return;
     if (images.isEmpty) {
       setState(() => error = 'أضف صورة واحدة على الأقل للوجبة');
       return;
@@ -178,7 +208,9 @@ class _MealEditorPageState extends State<MealEditorPage> {
         'id': widget.meal?['id'],
         'name': name.text.trim(),
         'description': description.text.trim(),
-        'price': amount(price.text),
+        'price': sizes.isEmpty ? amount(price.text) : sizes.first['price'],
+        'options': {'sizes': sizes, 'addons': addons},
+        'save_category_addons': saveCategoryAddons,
         'previous_price': discounted ? amount(previous.text) : null,
         'category': category,
         'catalog_category': catalogCategory,
@@ -335,7 +367,12 @@ class _MealEditorPageState extends State<MealEditorPage> {
                     ),
                   )
                   .toList(),
-              onChanged: saving ? null : (v) => setState(() => category = v!),
+              onChanged: saving || optionsLoading
+                  ? null
+                  : (v) async {
+                      setState(() => category = v!);
+                      await loadCategoryOptions();
+                    },
             ),
             const SizedBox(height: 18),
             TextButton.icon(
@@ -363,6 +400,30 @@ class _MealEditorPageState extends State<MealEditorPage> {
             ),
             const SizedBox(height: 18),
             field('وصف الوجبة', description, lines: 2),
+            if (optionsLoading) const LinearProgressIndicator(),
+            FoodOptionsEditor(
+              b: widget.b,
+              sizes: sizes,
+              addons: addons,
+              disabled: saving || uploading || optionsLoading,
+              changeSizes: (v) => setState(() {
+                sizes = v;
+                if (v.isNotEmpty) price.text = v.first['price'].toString();
+              }),
+              changeAddons: (v) => setState(() => addons = v),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('حفظ الإضافات لهذا القسم'),
+              subtitle: Text(
+                'تظهر تلقائيًا عند إضافة وجبة جديدة في قسم $category. تبقى خيارات الوجبات المنشورة كما هي.',
+              ),
+              value: saveCategoryAddons,
+              onChanged: saving || optionsLoading
+                  ? null
+                  : (v) => setState(() => saveCategoryAddons = v),
+            ),
+            const SizedBox(height: 18),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('عليها خصم'),
@@ -415,7 +476,7 @@ class _MealEditorPageState extends State<MealEditorPage> {
               ),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: saving || uploading ? null : save,
+              onPressed: saving || uploading || optionsLoading ? null : save,
               child: Text(saving ? 'جار الحفظ…' : 'حفظ الوجبة'),
             ),
             TextButton(

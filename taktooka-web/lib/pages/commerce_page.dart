@@ -1,3 +1,7 @@
+import 'package:taktooka/models/food_cart.dart';
+import 'package:taktooka/services/restaurant_favorites.dart';
+import 'package:taktooka/widgets/food_order_item.dart';
+import 'meal_details_page.dart';
 import 'food_checkout_page.dart';
 
 import 'package:taktooka/widgets/food_discovery.dart';
@@ -35,11 +39,13 @@ class FoodPage extends StatefulWidget {
   final Backend b;
   final bool register;
   final String? initialOrderId;
+  final Json? initialRestaurant;
   const FoodPage({
     super.key,
     required this.b,
     this.register = false,
     this.initialOrderId,
+    this.initialRestaurant,
   });
   @override
   State<FoodPage> createState() => _FoodPageState();
@@ -54,7 +60,9 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   bool offersOnly = false, locatingArea = false;
   Timer? searchTimer;
   Json? selected;
-  final cart = <String, int>{};
+  final cart = FoodCart();
+  final foodScroll = ScrollController();
+  late final RestaurantFavorites favorites;
   bool busy = false, loading = true, foreground = true;
   String? error;
   Timer? timer;
@@ -78,6 +86,13 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     me = Json.from(b.commerce);
+    selected = widget.initialRestaurant;
+    favorites = favoritesFor(b)..addListener(_favoritesChanged);
+    if (!b.captain &&
+        b.commerce['restaurant'] == null &&
+        b.commerce['self_courier'] == null)
+      unawaited(refreshFavorites());
+    cart.addListener(_favoritesChanged);
     if (widget.initialOrderId != null)
       tab = b.captain || b.commerce['self_courier'] is Map ? 0 : 1;
     privateTracking = RestaurantCourierTracking(b)
@@ -96,12 +111,28 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     if (foreground) load(silent: true);
   }
 
+  void _favoritesChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> refreshFavorites() async {
+    try {
+      await favorites.load();
+    } catch (e) {
+      if (mounted) setState(() => error = commerceError(e));
+    }
+  }
+
   void _trackingChanged() {
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    favorites.removeListener(_favoritesChanged);
+    cart.removeListener(_favoritesChanged);
+    cart.dispose();
+    foodScroll.dispose();
     privateTracking.removeListener(_trackingChanged);
     privateTracking.dispose();
     timer?.cancel();
@@ -522,7 +553,8 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
           SizedBox(
             width: 100,
             child: InkWell(
-              onTap: () => showMealPhotos(item),
+              onTap: () =>
+                  !owner && !preview ? openMeal(item) : showMealPhotos(item),
               child: Column(
                 children: [
                   photo(item['image_path'], height: 100),
@@ -570,30 +602,10 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                   ),
                 ),
                 if (!preview && !owner)
-                  Row(
-                    textDirection: TextDirection.ltr,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: busy || (cart[item['id']] ?? 0) == 0
-                            ? null
-                            : () => setState(
-                                () => cart[item['id']] = cart[item['id']]! - 1,
-                              ),
-                        icon: const Icon(Icons.remove_circle_outline),
-                      ),
-                      Text('${cart[item['id']] ?? 0}'),
-                      IconButton(
-                        onPressed: busy
-                            ? null
-                            : () => setState(
-                                () => cart[item['id']] =
-                                    ((cart[item['id']] ?? 0) + 1).clamp(0, 99),
-                              ),
-                        icon: const Icon(Icons.add_circle),
-                        color: scarlet,
-                      ),
-                    ],
+                  TextButton.icon(
+                    onPressed: busy ? null : () => openMeal(item),
+                    icon: const Icon(Icons.add_circle, color: scarlet),
+                    label: const Text('اختيار الوجبة'),
                   ),
               ],
             ),
@@ -648,19 +660,71 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   }
 
   Future<void> openShop(Json shop) async {
-    if (selected?['id'] != shop['id']) cart.clear();
     await run(() async {
       menu = Backend.rows(
         await commerceRpc(b, 'menu', {'restaurant_id': shop['id']}),
       );
-      if (mounted) setState(() => selected = shop);
+      if (mounted) {
+        setState(() => selected = shop);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && foodScroll.hasClients) foodScroll.jumpTo(0);
+        });
+      }
     });
   }
 
-  int get subtotal => menu.fold<int>(
-    0,
-    (sum, i) => sum + (i['price'] as num).toInt() * (cart[i['id']] ?? 0),
-  );
+  Future<void> openMeal(Json item, {Json? previous}) async {
+    if (selected == null || busy) return;
+    final shop = Json.from(selected!);
+    final result = await Navigator.push<Json>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Theme(
+          data: commerceTheme(),
+          child: MealDetailsPage(
+            meal: item,
+            restaurant: shop,
+            favorite: favorites.contains(shop['id']),
+            toggleFavorite: () => favorites.toggle(shop),
+            photo: photo,
+            initial: previous,
+          ),
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    if (!cart.accepts(shop['id'])) {
+      final replace = await showDialog<bool>(
+        context: context,
+        builder: (d) => AlertDialog(
+          title: const Text('سلتك من مطعم آخر'),
+          content: Text(
+            'السلة الحالية من ${cart.restaurant?['name']}. تريد تبدأ سلة جديدة من ${shop['name']}؟',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(d, false),
+              child: const Text('الاحتفاظ بالسلة'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(d, true),
+              child: const Text('بدء سلة جديدة'),
+            ),
+          ],
+        ),
+      );
+      if (replace != true || !mounted) return;
+      cart.clear();
+    }
+    try {
+      cart.add(shop, result);
+      requestId = const Uuid().v4();
+    } catch (e) {
+      if (mounted) setState(() => error = commerceError(e));
+    }
+  }
+
+  int get subtotal => cart.total;
   Future<void> checkout() async {
     if (subtotal <= 0) return;
     final place = await location('عنوان توصيل الطعام');
@@ -670,7 +734,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
       final response = await b.db.functions.invoke(
         'taktooka-quote',
         body: {
-          'pickup': selected!['location'],
+          'pickup': cart.restaurant!['location'],
           'force_fresh': true,
           'destination': [place.point.latitude, place.point.longitude],
         },
@@ -689,11 +753,12 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
           builder: (_) => Theme(
             data: commerceTheme(),
             child: FoodCheckoutPage(
-              restaurant: selected!,
-              items: [
-                for (final i in menu.where((m) => (cart[m['id']] ?? 0) > 0))
-                  {...i, 'quantity': cart[i['id']]},
-              ],
+              restaurant: cart.restaurant!,
+              items: cart.items,
+              onQuantityChanged: (index, value) {
+                cart.setQuantity(index, value);
+                requestId = const Uuid().v4();
+              },
               place: place,
               delivery: quote['fare'] as num,
               serviceFee: fresh['service_fee'] as num,
@@ -708,16 +773,13 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
       }
       await commerceRpc(b, 'order_create', {
         'request_id': requestId,
-        'restaurant_id': selected!['id'],
+        'restaurant_id': cart.restaurant!['id'],
         'quote_id': quote['id'],
         'expected_delivery_fee': quote['fare'],
         'expected_food_total': subtotal,
         'customer_address': place.label,
         'expected_service_fee': fresh['service_fee'],
-        'items': [
-          for (final e in cart.entries)
-            if (e.value > 0) {'id': e.key, 'quantity': e.value},
-        ],
+        'items': cart.requestItems,
       });
       requestId = const Uuid().v4();
       cart.clear();
@@ -980,6 +1042,8 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                 ],
               ),
               const SizedBox(height: 14),
+              for (final item in o['items'] as List? ?? [])
+                FoodOrderItem(item: Json.from(item), photo: photo),
               if (courier)
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -1222,11 +1286,15 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                             return;
                           }
                           await openShop(matches.first);
-                          final available = menu.map((i) => i['id']).toSet();
-                          cart.clear();
-                          for (final item in o['items'] as List) {
-                            if (available.contains(item['id']))
-                              cart[item['id']] = item['quantity'] as int;
+                          for (final old in o['items'] as List) {
+                            final matches = menu.where(
+                              (i) => i['id'] == old['id'],
+                            );
+                            if (matches.isNotEmpty && mounted)
+                              await openMeal(
+                                matches.first,
+                                previous: Json.from(old),
+                              );
                           }
                           if (mounted) setState(() => tab = 0);
                         },
@@ -1468,12 +1536,32 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
             : courier
             ? 'طلبات الطعام'
             : 'طعام',
-        style:heading(21),
+        style: heading(21),
       ),
       centerTitle: true,
-      leading:owner?IconButton(tooltip:'إعدادات المطعم',onPressed:busy?null:editRestaurant,icon:const Icon(Icons.settings_outlined)):null,
+      leading: owner
+          ? IconButton(
+              tooltip: 'إعدادات المطعم',
+              onPressed: busy ? null : editRestaurant,
+              icon: const Icon(Icons.settings_outlined),
+            )
+          : null,
       actions: [
-        if(owner)IconButton(tooltip:'الطلبات الجديدة',onPressed:(){setState(()=>tab=1);load();},icon:Badge(isLabelVisible:orders.any((o)=>o['status']=='pending'),label:Text('${orders.where((o)=>o['status']=='pending').length}'),child:const Icon(Icons.notifications_outlined)))
+        if (owner)
+          IconButton(
+            tooltip: 'الطلبات الجديدة',
+            onPressed: () {
+              setState(() => tab = 1);
+              load();
+            },
+            icon: Badge(
+              isLabelVisible: orders.any((o) => o['status'] == 'pending'),
+              label: Text(
+                '${orders.where((o) => o['status'] == 'pending').length}',
+              ),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+          )
         else ...[
           IconButton(
             tooltip: 'دعم تكتوكة',
@@ -1515,7 +1603,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
         ],
       ],
     ),
-    bottomNavigationBar: !owner && !courier && selected != null && subtotal > 0
+    bottomNavigationBar: !owner && !courier && subtotal > 0
         ? SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -1526,7 +1614,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                   runSpacing: 4,
                   children: [
                     const Text('عرض السلة'),
-                    Text('${cart.values.fold<int>(0, (s, n) => s + n)} وجبة'),
+                    Text('${cart.quantity} وجبة'),
                     Text(money(subtotal)),
                   ],
                 ),
@@ -1539,6 +1627,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
         : RefreshIndicator(
             onRefresh: load,
             child: CustomScrollView(
+              controller: foodScroll,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverToBoxAdapter(
@@ -1720,6 +1809,11 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                               )
                               .toList(),
                           meals: catalog,
+                          favorites: favorites.restaurants,
+                          isFavorite: (r) => favorites.contains(r['id']),
+                          toggleFavorite: (r) => run(() async {
+                            await favorites.toggle(r);
+                          }),
                           selectedCategory: cuisine,
                           offers: offersOnly,
                           area: _restaurantArea == null
@@ -1761,7 +1855,13 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                             final match = shops.where(
                               (r) => r['id'] == i['restaurant_id'],
                             );
-                            if (match.isNotEmpty) await openShop(match.first);
+                            if (match.isNotEmpty) {
+                              await openShop(match.first);
+                              final meal = menu.where(
+                                (m) => m['id'] == i['id'],
+                              );
+                              if (meal.isNotEmpty) await openMeal(meal.first);
+                            }
                           },
                           photo: photo,
                           banner: HomeBanners(
@@ -1802,8 +1902,8 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                             onPressed: () {
                               setState(() {
                                 selected = null;
-                                cart.clear();
                               });
+                              if (foodScroll.hasClients) foodScroll.jumpTo(0);
                             },
                             child: const Text('كل المطاعم'),
                           ),
@@ -1812,7 +1912,36 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                         else ...[
                           photo(selected!['image_path'], height: 160),
                           const SizedBox(height: 12),
-                          Text(selected!['name'], style: heading(24)),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  selected!['name'],
+                                  style: heading(24),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: favorites.contains(selected!['id'])
+                                    ? 'إزالة من المفضلة'
+                                    : 'حفظ المطعم',
+                                onPressed:
+                                    busy ||
+                                        favorites.pending.contains(
+                                          selected!['id'],
+                                        )
+                                    ? null
+                                    : () => run(() async {
+                                        await favorites.toggle(selected!);
+                                      }),
+                                icon: Icon(
+                                  favorites.contains(selected!['id'])
+                                      ? Icons.favorite
+                                      : Icons.favorite_border,
+                                  color: scarlet,
+                                ),
+                              ),
+                            ],
+                          ),
                           Text(
                             selected!['address'] ?? '',
                             style: const TextStyle(color: Colors.grey),

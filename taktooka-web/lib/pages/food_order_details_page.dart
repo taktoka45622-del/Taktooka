@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/food_order_item.dart';
 import 'chat_page.dart';
 
 import 'package:flutter/material.dart';
@@ -54,6 +55,22 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
     }
   }
 
+  Widget photo(dynamic path, {double height = 80}) => ClipRRect(
+    borderRadius: BorderRadius.circular(12),
+    child: Image.network(
+      widget.b.db.storage
+          .from('restaurant-images')
+          .getPublicUrl('${path ?? ''}'),
+      height: height,
+      width: height,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => SizedBox(
+        height: height,
+        width: height,
+        child: const Icon(Icons.restaurant, color: scarlet),
+      ),
+    ),
+  );
   LatLng? point(dynamic raw) =>
       raw is List && raw.length == 2 && raw[0] is num && raw[1] is num
       ? LatLng((raw[0] as num).toDouble(), (raw[1] as num).toDouble())
@@ -388,14 +405,8 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text('تفاصيل الحساب', style: heading(18)),
-                  for (final item in (order['items'] as List? ?? []))
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: CommerceAmountRow(
-                        '${item['name']} × ${item['quantity']}',
-                        (item['price'] as num) * (item['quantity'] as num),
-                      ),
-                    ),
+                  for (final item in order['items'] as List? ?? [])
+                    FoodOrderItem(item: Json.from(item), photo: photo),
                   const Divider(),
                   CommerceAmountRow('الطعام', order['food_total'] as num),
                   CommerceAmountRow(
