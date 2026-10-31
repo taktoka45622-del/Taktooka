@@ -1,4 +1,6 @@
 import 'dart:async';
+
+
 import 'package:taktooka/core/display_format.dart';
 
 import 'package:flutter/material.dart';
@@ -14,7 +16,13 @@ import 'package:taktooka/widgets/booking_map_layer.dart';
 class FoodTrackingPage extends StatefulWidget {
   final Backend b;
   final String orderId;
-  const FoodTrackingPage({super.key, required this.b, required this.orderId});
+  final bool compact;
+  const FoodTrackingPage({
+    super.key,
+    required this.b,
+    required this.orderId,
+    this.compact = false,
+  });
   @override
   State<FoodTrackingPage> createState() => _FoodTrackingPageState();
 }
@@ -56,14 +64,28 @@ class _FoodTrackingPageState extends State<FoodTrackingPage>
   LatLng? get customer => point(order['customer_location']);
   LatLng? get target =>
       ['accepted', 'heading'].contains(order['status']) ? shop : customer;
+  bool get visible {
+    if (!mounted || !foreground || ModalRoute.of(context)?.isCurrent != true)
+      return false;
+    if (!widget.compact) return true;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || !box.attached) return false;
+    final offset = box.localToGlobal(Offset.zero);
+    return offset.dy + box.size.height > 0 &&
+        offset.dy < MediaQuery.sizeOf(context).height;
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.b.addListener(localMoved);
     load();
-    timer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (foreground) load();
+    timer = Timer.periodic(Duration(seconds: widget.compact ? 5 : 3), (_) {
+      if (visible &&
+          (data == null ||
+              ['accepted', 'heading', 'picked_up'].contains(order['status'])))
+        load();
     });
   }
 
@@ -74,7 +96,7 @@ class _FoodTrackingPageState extends State<FoodTrackingPage>
   }
 
   void localMoved() {
-    if (mounted && mine) setState(() {});
+    if (mounted && mine && visible) setState(() {});
   }
 
   @override
@@ -172,7 +194,7 @@ class _FoodTrackingPageState extends State<FoodTrackingPage>
       map.fitCamera(
         CameraFit.bounds(
           bounds: LatLngBounds.fromPoints(points),
-          padding: const EdgeInsets.all(64),
+          padding: EdgeInsets.all(widget.compact ? 24 : 64),
           maxZoom: 17,
         ),
       );
@@ -258,6 +280,58 @@ class _FoodTrackingPageState extends State<FoodTrackingPage>
         captain != null &&
         shop != null &&
         const Distance()(captain!, shop!) < 30;
+    if (widget.compact) {
+      return Stack(
+        children: [
+          FlutterMap(
+            mapController: map,
+            options: MapOptions(
+              initialCenter: p,
+              initialZoom: 14,
+              onMapReady: () {
+                ready = true;
+                fit();
+              },
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.none,
+              ),
+            ),
+            children: [
+              const BookingMapLayer(),
+              if (route.isNotEmpty && captain != null && active)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: route,
+                      color: const Color(0xffe7132c),
+                      strokeWidth: 4,
+                    ),
+                  ],
+                ),
+              MarkerLayer(
+                markers: [
+                  if (shop != null)
+                    marker(shop!, Icons.storefront, 'المطعم', Colors.red),
+                  if (customer != null)
+                    marker(customer!, Icons.home, 'الزبون', Colors.blue),
+                ],
+              ),
+              if (captain != null && active)
+                AnimatedFoodCaptain(
+                  point: captain!,
+                  bike: order['vehicle'] == 'bike',
+                  label: 'الكابتن',
+                ),
+            ],
+          ),
+          const Positioned(
+            bottom: 4,
+            left: 4,
+            child: Text('© OpenStreetMap', style: TextStyle(fontSize: 10)),
+          ),
+        ],
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: Text(mine ? 'خريطة توصيل الطلب' : 'تتبّع مندوبك')),
       body: Column(

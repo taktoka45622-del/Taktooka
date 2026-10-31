@@ -11,6 +11,7 @@ void main() {
       var pressed = false;
       await tester.pumpWidget(
         MaterialApp(
+          theme: ThemeData(splashFactory: InkRipple.splashFactory),
           builder: (_, child) => DismissKeyboardOnOutsideTap(child: child!),
           home: Scaffold(
             body: Column(
@@ -50,5 +51,9 @@ void main() {
       first.dispose();
       second.dispose();
     },
+    variant: TargetPlatformVariant({
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+    }),
   );
 }

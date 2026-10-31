@@ -1,5 +1,9 @@
 import 'package:taktooka/core/display_format.dart';
+
 import 'dart:async';
+
+import 'request_notifications.dart';
+
 import 'dart:convert';
 
 import 'package:audioplayers/audioplayers.dart';
@@ -38,7 +42,7 @@ Map<String, dynamic> noticeData(Map<String, dynamic> n) => {
 };
 final nativeNotices = FlutterLocalNotificationsPlugin();
 const offerChannelId = 'tkt_requests_v4';
-const offerChannelName = 'طلبات المشاوير';
+const offerChannelName = 'طلبات الرحلات والطعام';
 final offerVibration = Int64List.fromList([0, 600, 300, 600, 300, 900]);
 const appleNotices = MethodChannel('taktooka/notifications');
 Future<void> cancelAppleOffer(String id) async {
@@ -94,7 +98,8 @@ Future<void> _displayNotice(
 }) async {
   if (kIsWeb) return;
   final n = noticeData(raw),
-      offer = n['kind'] == 'offer',
+      offer = isIncomingRequest(n),
+      rideOffer = n['kind'] == 'offer',
       id = noticeId(
         '${offer || n['kind'] == 'offer_end' ? n['offer_id'] : n['notification_id'] ?? n['id']}',
       );
@@ -116,8 +121,10 @@ Future<void> _displayNotice(
   seen.add(event);
   await nativeNotices.show(
     id,
-    englishDigits(offer ? 'كابتن، عندك رحلة' : '${n['title'] ?? 'تكتوكة'}'),
-    englishDigits(offer ? 'اضغط لعرض الرحلة وقبولها' : '${n['body'] ?? ''}'),
+    englishDigits(rideOffer ? 'كابتن، عندك رحلة' : '${n['title'] ?? 'تكتوكة'}'),
+    englishDigits(
+      rideOffer ? 'اضغط لعرض الرحلة وقبولها' : '${n['body'] ?? ''}',
+    ),
     NotificationDetails(
       android: AndroidNotificationDetails(
         offer ? offerChannelId : 'tkt_updates_v1',
@@ -138,12 +145,13 @@ Future<void> _displayNotice(
             ? const RawResourceAndroidNotificationSound('captain_request')
             : null,
         timeoutAfter: offer
-            ? offerRingDuration(
-                DateTime.tryParse('${n['expires_at']}'),
-              ).inMilliseconds
+            ? offerRingDuration(DateTime.tryParse('${n['expires_at']}'))
+                  .inMilliseconds
             : null,
         additionalFlags: offer && ring ? Int32List.fromList([4]) : null,
-        ticker: offer ? 'كابتن، عندك رحلة' : null,
+        ticker: offer
+            ? (rideOffer ? 'كابتن، عندك رحلة' : '${n['title']}')
+            : null,
         autoCancel: true,
         category: offer
             ? AndroidNotificationCategory.call
@@ -204,6 +212,7 @@ class NotificationCenter extends ChangeNotifier {
   final AudioPlayer player;
   final Set<String> rung = {};
   String? ringing;
+  bool _ringingFood = false;
   Future<void> audioQueue = Future.value(), binding = Future.value();
   int get unread => inbox
       .where((n) => n['read_at'] == null && n['kind'] != 'offer_end')
@@ -361,8 +370,7 @@ class NotificationCenter extends ChangeNotifier {
       permissionDenied =
           settings.authorizationStatus == AuthorizationStatus.denied;
       if (permissionDenied) {
-        deviceError =
-            'إشعارات الجهاز متوقفة. اسمح بها من إعدادات الهاتف ← التطبيقات ← تكتوكة ← الإشعارات.';
+        deviceError = 'إشعارات الجهاز متوقفة. اسمح بها من إعدادات الهاتف ← التطبيقات ← تكتوكة ← الإشعارات.';
         return;
       }
       if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -431,10 +439,12 @@ class NotificationCenter extends ChangeNotifier {
     }
   }
 
-  Future<dynamic> rpc(String action, [Json data = const {}]) => backend.db.rpc(
-    'tkt_notification_action',
-    params: {'p_action': action, 'p_data': data},
-  );
+  Future<dynamic> rpc(String action, [Json data = const {}]) => backend.db
+      .rpc(
+        'tkt_notification_action',
+        params: {'p_action': action, 'p_data': data},
+      )
+      .timeout(const Duration(seconds: 15));
   Future<void> register() async {
     final uid = user, deviceToken = token;
     if (uid == null || deviceToken == null) return;
@@ -451,8 +461,7 @@ class NotificationCenter extends ChangeNotifier {
     } catch (error) {
       if (uid != user || closed) return;
       deviceRegistered = false;
-      deviceError =
-          'تعذّر تسجيل الجهاز بالسيرفر. تأكد من الاتصال واضغط إعادة المحاولة.';
+      deviceError = 'تعذر تسجيل إشعارات الجهاز: ${readable(error)}';
     }
     if (!closed) notifyListeners();
   }
@@ -488,14 +497,21 @@ class NotificationCenter extends ChangeNotifier {
     if (uid == null || loading || closed) return;
     loading = true;
     try {
-      final values = Backend.rows(
-        await rpc('list'),
-      ).where((n) => n['kind'] != 'pricing_update').toList();
+      final values = Backend.rows(await rpc('list'))
+          .where((n) => n['kind'] != 'pricing_update')
+          .toList();
       if (uid != user || closed) return;
       final previous = inbox.map((n) => n['id']).toSet();
       final incoming = loadedInbox
           ? values.where((n) => !previous.contains(n['id'])).toList()
-          : <Json>[];
+          : values
+                .where(
+                  (n) =>
+                      isIncomingRequest(noticeData(n)) &&
+                      n['read_at'] == null &&
+                      !noticeExpired(n),
+                )
+                .toList();
       inbox = values;
       loadedInbox = true;
       inboxError = null;
@@ -534,10 +550,16 @@ class NotificationCenter extends ChangeNotifier {
       unawaited(showDeviceNotice(n));
       unawaited(backend.refresh());
     } else {
-      unawaited(showDeviceNotice(n, ring: n['kind'] != 'offer' || !foreground));
-      if (n['kind'] == 'offer') {
+      unawaited(
+        showDeviceNotice(n, ring: !isIncomingRequest(n) || !foreground),
+      );
+      if (isIncomingRequest(n)) {
         unawaited(backend.refresh());
-        startRing('${n['offer_id']}', DateTime.tryParse('${n['expires_at']}'));
+        startRing(
+          '${n['offer_id']}',
+          DateTime.tryParse('${n['expires_at']}'),
+          food: isFoodRequest(n),
+        );
       }
     }
     unawaited(load());
@@ -564,7 +586,9 @@ class NotificationCenter extends ChangeNotifier {
         .where((r) => backend.offerSeconds(r) > 0)
         .toList();
     if (ringing != null &&
+        !_ringingFood &&
         (!backend.tracking ||
+            !backend.ridesEnabled ||
             backend.activeRide != null ||
             !offers.any((r) => r['offer_id'] == ringing))) {
       final id = ringing!;
@@ -573,7 +597,8 @@ class NotificationCenter extends ChangeNotifier {
     }
     if (foreground &&
         backend.tracking &&
-        backend.subscribed &&
+        backend.canReceiveOrders &&
+        backend.ridesEnabled &&
         offers.isNotEmpty) {
       final r = offers.first;
       startRing(
@@ -583,17 +608,20 @@ class NotificationCenter extends ChangeNotifier {
     }
   }
 
-  void startRing(String id, DateTime? expires) {
+  void startRing(String id, DateTime? expires, {bool food = false}) {
     if (!foreground ||
-        !backend.captain ||
-        !backend.tracking ||
-        !backend.subscribed ||
+        (!food &&
+            (!backend.ridesEnabled ||
+                !backend.tracking ||
+                !backend.canReceiveOrders)) ||
+        backend.profile?['blocked'] == true ||
         rung.contains(id) ||
         noticeExpired({'expires_at': expires?.toIso8601String()}))
       return;
     rung.add(id);
     ringTimer?.cancel();
     ringing = id;
+    _ringingFood = food;
     audioQueue = audioQueue.catchError((_) {}).then((_) async {
       await player.stop();
       if (ringing != id || closed) return;
@@ -618,6 +646,7 @@ class NotificationCenter extends ChangeNotifier {
 
   Future<void> stopRing() {
     ringing = null;
+    _ringingFood = false;
     ringTimer?.cancel();
     ringTimer = null;
     audioQueue = audioQueue.catchError((_) {}).then((_) => player.stop());
@@ -651,10 +680,11 @@ class NotificationCenter extends ChangeNotifier {
       return;
     }
     if ((n['recipient_id'] ?? n['user_id']) != user) return;
-    if (n['kind'] == 'offer' && noticeExpired(n)) {
+    if (isIncomingRequest(n) && noticeExpired(n)) {
       unawaited(load());
       return;
     }
+    if (isIncomingRequest(n)) unawaited(silenceOffer('${n['offer_id']}'));
     unawaited(read(n));
     open(n);
   }

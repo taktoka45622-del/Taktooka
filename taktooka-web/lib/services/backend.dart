@@ -32,7 +32,8 @@ class LocationAccessException implements Exception {
     LocationAccessIssue.serviceDisabled => 'شغّل الموقع حتى نحدد نقطة الانطلاق',
     LocationAccessIssue.permissionDenied =>
       'اسمح لتكتوكة باستخدام موقعك حتى نحدد نقطة الانطلاق',
-    LocationAccessIssue.accuracyInsufficient => 'الموقع الدقيق بعده مو جاهز؛ فعّل الموقع الدقيق وقرّب من مكان مفتوح ثم أعد المحاولة',
+    LocationAccessIssue.accuracyInsufficient =>
+      'الموقع الدقيق بعده مو جاهز؛ فعّل الموقع الدقيق وقرّب من مكان مفتوح ثم أعد المحاولة',
     LocationAccessIssue.permissionDeniedForever =>
       'فعّل إذن الموقع لتكتوكة من إعدادات التطبيق',
   };
@@ -223,9 +224,9 @@ class Backend extends ChangeNotifier {
       ? DateTime.now().toUtc()
       : _serverAnchor!.add(_serverElapsed.elapsed);
   int offerSeconds(Json offer) =>
-      (DateTime.parse(offer['offer_expires_at'])
-                  .difference(serverNow)
-                  .inMilliseconds /
+      (DateTime.parse(
+                offer['offer_expires_at'],
+              ).difference(serverNow).inMilliseconds /
               1000)
           .ceil()
           .clamp(0, 30);
@@ -347,13 +348,24 @@ class Backend extends ChangeNotifier {
   Json commerce = {};
   bool get restaurantOwner => commerce['restaurant'] is Map;
   bool get commissionPlan => commerce['plan'] == 'commission';
+  bool get ridesEnabled =>
+      captain &&
+      commerce['vehicle'] != 'bike' &&
+      commerce['receive_rides'] != false;
+  bool get foodEnabled =>
+      captain &&
+      commerce['receive_food'] != false &&
+      (commerce['vehicle'] == 'bike' || !commissionPlan);
   bool get canReceiveOrders =>
-      (commissionPlan || subscribed) && commerce['debt_blocked'] != true;
+      (ridesEnabled || foodEnabled) &&
+      (commissionPlan || subscribed) &&
+      commerce['debt_blocked'] != true;
   bool get captain => profile?['captain'] == true;
   bool get admin => profile?['admin'] == true;
   bool get subscribed =>
-      DateTime.tryParse(profile?['expires_at'] ?? '')
-          ?.isAfter(DateTime.now()) ??
+      DateTime.tryParse(
+        profile?['expires_at'] ?? '',
+      )?.isAfter(DateTime.now()) ??
       false;
 
   Future<dynamic> action(String action, [Json data = const {}]) async => db
@@ -1095,7 +1107,8 @@ class Backend extends ChangeNotifier {
                     foregroundNotificationConfig:
                         const ForegroundNotificationConfig(
                           notificationTitle: 'تكتوكة — مشاركة موقع الكابتن',
-                          notificationText: 'موقعك يُشارك لاستقبال الرحلات وتتبع الرحلة الحالية',
+                          notificationText:
+                              'موقعك يُشارك لاستقبال الرحلات وتتبع الرحلة الحالية',
                           enableWakeLock: true,
                           setOngoing: true,
                         ),

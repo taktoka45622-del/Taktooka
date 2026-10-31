@@ -5,6 +5,7 @@ import 'package:taktooka/core/ride_format.dart';
 
 ThemeData appTheme() => ThemeData(
   useMaterial3: true,
+  splashFactory: NoSplash.splashFactory,
   visualDensity: VisualDensity.standard,
   materialTapTargetSize: MaterialTapTargetSize.padded,
   iconButtonTheme: IconButtonThemeData(
@@ -87,6 +88,7 @@ ThemeData appTheme() => ThemeData(
 ThemeData appDarkTheme() => ThemeData(
   brightness: Brightness.dark,
   useMaterial3: true,
+  splashFactory: NoSplash.splashFactory,
   visualDensity: VisualDensity.standard,
   materialTapTargetSize: MaterialTapTargetSize.padded,
   iconButtonTheme: IconButtonThemeData(

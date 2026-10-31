@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:taktooka/core/gender_copy.dart';
 
@@ -69,7 +70,7 @@ void showAppNotice(
     if (!identical(_noticeTimers[host], lifetime)) return;
     _noticeTimers[host]?.cancel();
     _noticeTimers[host] = null;
-    if (host.mounted) host.hideCurrentMaterialBanner();
+    if (host.mounted) host.removeCurrentMaterialBanner();
   }
 
   host.showMaterialBanner(
@@ -86,7 +87,12 @@ void showAppNotice(
           if (identical(_noticeTimers[host], lifetime))
             _noticeTimers[host] = null;
         },
-        child: AppNotice(message: message, kind: kind, onClose: close),
+        child: Dismissible(
+          key: UniqueKey(),
+          direction: DismissDirection.up,
+          onDismissed: (_) => close(),
+          child: AppNotice(message: message, kind: kind, onClose: close),
+        ),
       ),
     ),
   );

@@ -1,4 +1,4 @@
-import {createCommercePage} from './commerce.js?v=1.7.3';
+import {createCommercePage} from './commerce.js?v=1.7.4';
 import {createServerMonitor} from './server-monitor.js?v=1';
 import {createAccountAdmin} from './account-admin.js?v=1.6.93';
 import {setupPhoneActions,normalizeWhatsAppPhone,whatsappUrl} from './phone-actions.js?v=1.6.91';
@@ -535,7 +535,7 @@ async function loadBanners(){
  if(error)throw error;bannerRows=data;renderBanners();
 }
 function renderBanners(){
- for(const slot of [1,2]){
+ for(const slot of [1,2,3]){
   const list=$('bannerList'+slot);list.replaceChildren();
   for(const row of bannerRows.filter(x=>x.slot===slot)){
    const card=text('article','');card.className='banner-item';

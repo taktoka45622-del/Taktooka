@@ -103,11 +103,55 @@ void main() {
       center.startRing('third', null);
       await tester.pump();
       expect(audio.plays, 3);
-      center
-          .syncOffers();
+      center.syncOffers();
       await tester.pump();
       expect(audio.playing, false);
       center.dispose();
+      await tester.pump();
+    },
+  );
+  testWidgets(
+    'restaurant and private courier requests ring without captain subscription',
+    (tester) async {
+      final b = Backend()..profile = {'captain': false};
+      final audio = FakeAudio();
+      final center = NotificationCenter(b, (_) {}, audioPlayer: audio);
+      center.startRing('food:restaurant', null, food: true);
+      await tester.pump();
+      expect(audio.playing, true);
+      center.syncOffers();
+      await tester.pump();
+      expect(
+        audio.playing,
+        true,
+        reason: 'ride refresh must not cancel a restaurant request',
+      );
+      await center.silenceOffer('food:restaurant');
+      expect(audio.playing, false);
+      center.startRing('food:private', null, food: true);
+      await tester.pump();
+      expect(audio.plays, 2);
+      await tester.pump(const Duration(seconds: 30));
+      expect(audio.playing, false);
+      center.dispose();
+      b.dispose();
+      await tester.pump();
+    },
+  );
+  testWidgets(
+    'commission captain receives ride ringtone without weekly subscription',
+    (tester) async {
+      final b = Backend()
+        ..profile = {'captain': true}
+        ..commerce = {'plan': 'commission'}
+        ..tracking = true;
+      final audio = FakeAudio();
+      final center = NotificationCenter(b, (_) {}, audioPlayer: audio);
+      center.startRing('commission-ride', null);
+      await tester.pump();
+      expect(audio.playing, true);
+      center.dispose();
+      b.dispose();
       await tester.pump();
     },
   );

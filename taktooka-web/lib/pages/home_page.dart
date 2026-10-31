@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import 'captain_service_preferences.dart';
+
 import 'package:taktooka/pages/commerce_page.dart';
 
 import 'package:taktooka/core/design.dart';
@@ -26,19 +29,41 @@ class HomePage extends StatelessWidget {
     IconData icon,
     String label,
     VoidCallback action,
-    Color color,
-  ) => Expanded(
+    Color color, {
+    bool locked = false,
+  }) => Expanded(
     child: Card(
       margin: const EdgeInsets.symmetric(horizontal: 4),
       color: Theme.of(context).colorScheme.surface,
       child: InkWell(
-        onTap: action,
+        onTap: locked
+            ? () => showDialog<void>(
+                context: context,
+                builder: (d) => AlertDialog(
+                  title: const Text('الميزة تحتاج اشتراك أسبوعي'),
+                  content: const Text('فعّل الاشتراك حتى تفتح هذه الخدمة'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(d),
+                      child: const Text('رجوع'),
+                    ),
+                    FilledButton(
+                      onPressed: () {
+                        Navigator.pop(d);
+                        support();
+                      },
+                      child: const Text('تفعيل الاشتراك'),
+                    ),
+                  ],
+                ),
+              )
+            : action,
         borderRadius: BorderRadius.circular(18),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 16),
           child: Column(
             children: [
-              Icon(icon, color: color, size: 30),
+              Icon(locked ? Icons.lock_outline : icon, color: color, size: 30),
               const SizedBox(height: 10),
               AppText(
                 label,
@@ -55,6 +80,7 @@ class HomePage extends StatelessWidget {
   );
   @override
   Widget build(BuildContext context) {
+    if (b.commerce['self_courier'] is Map) return FoodPage(b: b);
     final scale = uiScale(context);
     return HomeBanners(
       backend: b,
@@ -170,11 +196,26 @@ class HomePage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
+            if (b.captain)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: OutlinedButton.icon(
+                  onPressed: () => showCaptainServicePreferences(context, b),
+                  icon: const Icon(Icons.tune),
+                  label: const Text('تحديد طلبات الرحلات والطعام'),
+                ),
+              ),
             Row(
               children: [
-                if (!b.captain ||
-                    (!b.commissionPlan && b.commerce['vehicle'] != 'bike'))
-                  shortcut(context, Icons.route, 'الخطوط', lines, scarlet),
+                if (b.commerce['vehicle'] != 'bike')
+                  shortcut(
+                    context,
+                    Icons.route,
+                    'الخطوط',
+                    lines,
+                    scarlet,
+                    locked: b.captain && (b.commissionPlan || !b.subscribed),
+                  ),
                 shortcut(
                   context,
                   Icons.restaurant,
@@ -182,6 +223,10 @@ class HomePage extends StatelessWidget {
                   () => Navigator.of(context)
                       .push(MaterialPageRoute(builder: (_) => FoodPage(b: b))),
                   scarlet,
+                  locked:
+                      b.captain &&
+                      b.commerce['vehicle'] != 'bike' &&
+                      (b.commissionPlan || !b.subscribed),
                 ),
                 if (!b.captain)
                   shortcut(

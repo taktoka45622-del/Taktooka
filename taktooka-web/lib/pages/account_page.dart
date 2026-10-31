@@ -1,5 +1,6 @@
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'package:taktooka/core/display_format.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -109,8 +110,6 @@ class _AccountPageState extends State<AccountPage> {
           );
           if (file == null) return;
           final bytes = await file.readAsBytes();
-          if (bytes.length > 6 * 1024 * 1024)
-            throw Exception('اختار صورة أصغر من 6 ميغابايت');
           final compressed = await compressProfilePhoto(bytes);
           if (b.db.auth.currentUser?.id != uid) return;
           path = '$uid/${const Uuid().v4()}.jpg';

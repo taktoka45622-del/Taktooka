@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/double_back_exit.dart';
 import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/core/display_format.dart';
 
@@ -263,7 +264,12 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     navigator.popUntil((route) => route.isFirst);
     switch (n['screen']) {
       case 'food':
-        navigator.push(MaterialPageRoute(builder: (_) => FoodPage(b: backend)));
+        navigator.push(
+          MaterialPageRoute(
+            builder: (_) =>
+                FoodPage(b: backend, initialOrderId: n['order_id']?.toString()),
+          ),
+        );
         break;
       case 'lines':
         openLines(n['line_id'] as String?);
@@ -471,9 +477,8 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       0 => HomePage(
         b: backend,
         book: backend.commerce['vehicle'] == 'bike'
-            ? () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => FoodPage(b: backend)))
+            ? () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => FoodPage(b: backend)))
             : book,
         lines: openLines,
         history: () => setState(() => tab = 1),
@@ -516,7 +521,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      DoubleBackExit(child: buildShell(context));
+  Widget buildShell(BuildContext context) {
     PreferencesScope.of(context);
     if (!backend.loggedIn) {
       _tabBodies.fillRange(0, 4, null);
@@ -591,7 +598,10 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
               ),
             ),
           Expanded(
-            child: IndexedStack(index: tab, children: tabViews()),
+            child: ColoredBox(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: KeyedSubtree(key: ValueKey(tab), child: tabBody(tab)),
+            ),
           ),
         ],
       ),

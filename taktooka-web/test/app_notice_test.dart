@@ -1,3 +1,4 @@
+import 'package:taktooka/core/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taktooka/widgets/app_notice.dart';
@@ -25,6 +26,7 @@ void main() {
         var taps = 0;
         await tester.pumpWidget(
           MaterialApp(
+            theme: appTheme(),
             home: Directionality(
               textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
               child: Scaffold(
@@ -86,6 +88,7 @@ void main() {
       late BuildContext context;
       await tester.pumpWidget(
         MaterialApp(
+          theme: appTheme(),
           home: Scaffold(
             body: Builder(
               builder: (c) {

@@ -1,3 +1,4 @@
+import 'package:taktooka/services/upload_image.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 
 import 'dart:async';
@@ -160,22 +161,11 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
   }
 
   Future<void> upload(String slot, XFile file, {Json? checks}) async {
-    final Uint8List bytes = await file.readAsBytes();
-    if (bytes.length > 6 * 1024 * 1024) throw StateError('INVALID_DOCUMENT');
-    String mime = 'image/jpeg', extension = 'jpg';
-    if (bytes.length > 8 && bytes[0] == 0x89 && bytes[1] == 0x50) {
-      mime = 'image/png';
-      extension = 'png';
-    } else if (bytes.length > 12 &&
-        bytes[0] == 0x52 &&
-        bytes[1] == 0x49 &&
-        bytes[8] == 0x57 &&
-        bytes[9] == 0x45) {
-      mime = 'image/webp';
-      extension = 'webp';
-    } else if (bytes.length < 3 || bytes[0] != 0xff || bytes[1] != 0xd8) {
-      throw StateError('INVALID_DOCUMENT');
-    }
+    final Uint8List bytes = await prepareUploadImage(
+      await file.readAsBytes(),
+      dimension: 1920,
+    );
+    const mime = 'image/jpeg', extension = 'jpg';
     final path = '${b.db.auth.currentUser!.id}/${const Uuid().v4()}.$extension';
     final oldPath = documents[slot] as String?;
     await b.db.storage
@@ -207,26 +197,13 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
   }
 
   void pick(String slot) => run(() async {
+    if (kIsWeb) throw StateError('التسجيل بالكاميرا متاح من تطبيق الهاتف');
     application = await captainRegistration(b, 'save', {
       ...fields(),
       'pending_slot': slot,
     });
     if (!mounted) return;
-    if (kIsWeb) {
-      final file = await picker.pickImage(
-        source: ImageSource.camera,
-        preferredCameraDevice: CameraDevice.rear,
-        imageQuality: 90,
-        requestFullMetadata: false,
-      );
-      if (file != null) {
-        await upload(slot, file);
-      } else {
-        application = await captainRegistration(b, 'save', {
-          'pending_slot': null,
-        });
-      }
-    } else if (slot == 'portrait') {
+    if (slot == 'portrait') {
       final file = await picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 2000,
@@ -346,9 +323,98 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
       ),
     ],
   );
+  Widget planCard(
+    String value,
+    String title,
+    String price,
+    IconData icon,
+    List<String> details,
+  ) {
+    final selected = plan == value;
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: selected ? scarlet : const Color(0xFFE5E7EB),
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: busy ? null : () => setState(() => plan = value),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    selected
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    color: selected ? scarlet : muted,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: AppText(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Icon(icon, color: selected ? scarlet : ink, size: 30),
+                ],
+              ),
+              const SizedBox(height: 12),
+              AppText(
+                price,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: selected ? scarlet : ink,
+                ),
+              ),
+              const Divider(height: 24),
+              for (final detail in details)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.check,
+                        size: 18,
+                        color: selected ? scarlet : muted,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: AppText(
+                          detail,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const AppText('تسجيل كابتن')),
+    backgroundColor: Colors.white,
+    appBar: AppBar(
+      title: AppText(
+        widget.vehicle == 'bike' ? 'تسجيل كابتن دراجة' : 'تسجيل كابتن تكتك',
+      ),
+    ),
     body: loading
         ? const Center(child: CircularProgressIndicator())
         : RefreshIndicator(
@@ -416,38 +482,102 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
                   ),
                   const SizedBox(height: 16),
                   if (step == -1) ...[
-                    ListTile(
-                      leading: Icon(
-                        plan == 'commission'
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
-                        color: scarlet,
-                      ),
-                      selected: plan == 'commission',
-                      onTap: busy
-                          ? null
-                          : () => setState(() => plan = 'commission'),
-                      title: const AppText('نظام النسبة'),
-                      subtitle: AppText(
-                        'بدون اشتراك أسبوعي. عمولة الشركة ${b.commerce['commission_percent'] ?? 20}% من أجرة الرحلة أو توصيل الطعام. لا يشمل الخطوط.',
+                    Row(
+                      children: [
+                        for (final label in [
+                          'نظام العمل',
+                          'معلوماتك',
+                          'المستندات',
+                        ])
+                          Expanded(
+                            child: Column(
+                              children: [
+                                CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor: label == 'نظام العمل'
+                                      ? scarlet
+                                      : const Color(0xFFF3F4F6),
+                                  child: Text(
+                                    '${['نظام العمل', 'معلوماتك', 'المستندات'].indexOf(label) + 1}',
+                                    style: TextStyle(
+                                      color: label == 'نظام العمل'
+                                          ? Colors.white
+                                          : muted,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                AppText(
+                                  label,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 28),
+                    const AppText(
+                      'اختار النظام المناسب إلك',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    ListTile(
-                      leading: Icon(
-                        plan == 'weekly'
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_off,
-                        color: scarlet,
-                      ),
-                      selected: plan == 'weekly',
-                      onTap: busy
-                          ? null
-                          : () => setState(() => plan = 'weekly'),
-                      title: const AppText('الاشتراك الأسبوعي — 5,000 دينار'),
-                      subtitle: AppText(
-                        widget.vehicle == 'bike'
-                            ? 'توصيل الطعام بدون عمولة على أجرة التوصيل.'
-                            : 'تكسي وخطوط مدارس وعمل وتوصيل مطاعم، بدون عمولة على الأجرة.',
+                    const AppText(
+                      'شوف التفاصيل وحدد طريقة شغلك',
+                      style: TextStyle(color: muted),
+                    ),
+                    const SizedBox(height: 20),
+                    planCard(
+                      'commission',
+                      'نظام النسبة',
+                      '${b.commerce['commission_percent'] ?? 20}% عمولة الشركة',
+                      Icons.toll_outlined,
+                      widget.vehicle == 'bike'
+                          ? [
+                              'بدون اشتراك أسبوعي',
+                              'استلام طلبات توصيل الطعام فقط',
+                              'النسبة على أجرة التوصيل فقط',
+                            ]
+                          : [
+                              'بدون اشتراك أسبوعي',
+                              'النسبة على أجرة رحلات الزبائن فقط',
+                              'لا يشمل توصيل طلبات المطاعم',
+                              'لا يشمل خطوط المدارس والعمل',
+                            ],
+                    ),
+                    const SizedBox(height: 16),
+                    planCard(
+                      'weekly',
+                      'الاشتراك الأسبوعي',
+                      '5,000 د.ع / أسبوع',
+                      Icons.calendar_month_outlined,
+                      widget.vehicle == 'bike'
+                          ? [
+                              'بدون نسبة على أجرة التوصيل',
+                              'استلام طلبات توصيل الطعام فقط',
+                              'أجرة التوصيل كلها إلك',
+                            ]
+                          : [
+                              'بدون نسبة على الرحلات أو التوصيل',
+                              'تختار رحلات الزبائن أو طلبات الطعام أو الاثنين',
+                              'بإمكانك استلام خطوط المدارس أو العمل',
+                            ],
+                    ),
+                    const SizedBox(height: 20),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(
+                          Icons.check_circle_outline,
+                          color: scarlet,
+                        ),
+                        title: AppText(
+                          'اختيارك: ${plan == 'weekly' ? 'الاشتراك الأسبوعي' : 'نظام النسبة'}',
+                        ),
+                        subtitle: const AppText(
+                          'تأكد من اختيارك قبل إكمال التسجيل',
+                        ),
                       ),
                     ),
                   ],

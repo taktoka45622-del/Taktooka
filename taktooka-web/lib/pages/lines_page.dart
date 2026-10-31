@@ -1,3 +1,4 @@
+import 'package:taktooka/services/upload_image.dart';
 import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/services/page_snapshot_cache.dart';
 import 'package:taktooka/widgets/line_section.dart';
@@ -439,7 +440,10 @@ class _RegisterLinePageState extends State<RegisterLinePage> {
       final uid = widget.b.db.auth.currentUser!.id;
       final paths = <String>[];
       for (final entry in [(front!, 'front'), (back!, 'back')]) {
-        final bytes = await entry.$1.readAsBytes();
+        final bytes = await prepareUploadImage(
+          await entry.$1.readAsBytes(),
+          dimension: 1920,
+        );
         if (bytes.length > 5 * 1024 * 1024)
           throw Exception('DOCUMENTS_REQUIRED');
         final path = '$uid/$draft/${entry.$2}-${const Uuid().v4()}.jpg';

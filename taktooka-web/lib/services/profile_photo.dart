@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'upload_image.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
@@ -23,4 +25,4 @@ Uint8List prepareProfilePhoto(Uint8List bytes) {
 }
 
 Future<Uint8List> compressProfilePhoto(Uint8List bytes) =>
-    compute(prepareProfilePhoto, bytes);
+    prepareUploadImage(bytes, dimension: 512);

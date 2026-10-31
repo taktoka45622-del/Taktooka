@@ -1,4 +1,5 @@
 import 'package:taktooka/core/numeric_localizations.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -433,9 +434,9 @@ class _FavoritePlacePickerState extends State<FavoritePlacePicker>
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  tileColor: Theme.of(
-                    context,
-                  ).colorScheme.surfaceContainerHighest,
+                  tileColor: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest,
                   leading: Icon(
                     Icons.location_on,
                     color: widget.origin ? const Color(0xffe56516) : brandRed,
@@ -494,6 +495,10 @@ class _FavoritePlacePickerState extends State<FavoritePlacePicker>
                     child: AppText(
                       widget.title == null
                           ? 'حفظ العنوان'
+                          : (widget.title?.contains('توصيل الطعام') ?? false)
+                          ? 'هذا موقعي للتوصيل'
+                          : (widget.title?.contains('المطعم') ?? false)
+                          ? 'تثبيت موقع المطعم'
                           : widget.origin
                           ? 'تأكيد نقطة الانطلاق'
                           : 'تأكيد نقطة الوصول',

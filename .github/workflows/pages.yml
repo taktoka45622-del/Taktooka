@@ -33,7 +33,7 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings lib
       - name: Test tracking, notifications and booking
         working-directory: taktooka-web
-        run: flutter test test/background_tracking_test.dart test/account_entry_test.dart test/ride_booking_regression_test.dart
+        run: flutter test --concurrency=1 test/background_tracking_test.dart test/account_entry_test.dart test/ride_booking_regression_test.dart test/commerce_responsive_test.dart test/keyboard_dismiss_test.dart test/upload_image_test.dart test/app_notice_test.dart test/exit_guard_test.dart test/offer_ring_test.dart test/background_offer_notice_test.dart
       - name: Build Taktooka Web
         working-directory: taktooka-web
         run: flutter build web --release --base-href /Taktooka/app/ --no-wasm-dry-run --no-web-resources-cdn
