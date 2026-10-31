@@ -75,7 +75,21 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
           await commerceRpc(b, 'menu', {'restaurant_id': restaurant['id']}),
         );
       } else if (!b.captain) {
-        shops = Backend.rows(await commerceRpc(b, 'restaurants'));
+        var position = b.knownPosition;
+        if (position == null ||
+            DateTime.now().difference(position.timestamp).inMinutes >= 10) {
+          if (!silent)
+            position = await b.locate(fresh: true);
+          else
+            position = null;
+        }
+        shops = position == null
+            ? []
+            : Backend.rows(
+                await commerceRpc(b, 'restaurants', {
+                  'location': [position.latitude, position.longitude],
+                }),
+              );
       }
       if (!mounted) return;
       setState(() {
@@ -613,7 +627,9 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                     ? null
                     : () async {
                         final shopsNow = Backend.rows(
-                          await commerceRpc(b, 'restaurants'),
+                          await commerceRpc(b, 'restaurants', {
+                            'location': o['customer_location'],
+                          }),
                         );
                         final matches = shopsNow.where(
                           (r) => r['id'] == o['restaurant_id'],
@@ -928,6 +944,9 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                         if (orders.isEmpty) const Text('لا توجد طلبات حالياً'),
                         for (final o in orders) orderCard(o),
                       ] else if (selected == null) ...[
+                        Text(
+                          'نطاق المطاعم: ${me['restaurant_min_distance_m'] ?? 0} – ${me['restaurant_max_distance_m'] ?? 15000} متر من موقعك',
+                        ),
                         if (shops.isEmpty)
                           const Text('لا توجد مطاعم متاحة حالياً'),
                         for (final shop in shops)

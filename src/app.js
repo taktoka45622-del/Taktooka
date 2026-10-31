@@ -1,4 +1,4 @@
-import {createCommercePage} from './commerce.js?v=1.7.0';
+import {createCommercePage} from './commerce.js?v=1.7.3';
 import {createServerMonitor} from './server-monitor.js?v=1';
 import {createAccountAdmin} from './account-admin.js?v=1.6.93';
 import {setupPhoneActions,normalizeWhatsAppPhone,whatsappUrl} from './phone-actions.js?v=1.6.91';

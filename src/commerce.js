@@ -5,7 +5,7 @@ export function createCommercePage({document,rpc,money,canEdit,run,profile,phone
  let busy=false;
  async function load(){
   const data=await rpc('admin');
-  for(const key of ['commission_percent','service_fee','captain_debt_limit','restaurant_debt_limit']){$('commerce_'+key).value=data.settings[key];$('commerce_'+key).disabled=!canEdit('finance');}
+  for(const key of ['commission_percent','service_fee','captain_debt_limit','restaurant_debt_limit','restaurant_min_distance_m','restaurant_max_distance_m']){$('commerce_'+key).value=data.settings[key];$('commerce_'+key).disabled=!canEdit('finance');}
   $('commerceSave').disabled=!canEdit('finance');
   const totals={};for(const d of data.debts)totals[d.kind]=(totals[d.kind]||0)+d.amount;
   $('commerceTotals').replaceChildren(...Object.entries(names).map(([key,label])=>text('p',`${label}: ${money(totals[key]||0)}`)));
@@ -19,7 +19,7 @@ export function createCommercePage({document,rpc,money,canEdit,run,profile,phone
    return row;
   }));
  }
- $('commerceForm').onsubmit=e=>{e.preventDefault();run(async()=>{const data={};for(const key of ['commission_percent','service_fee','captain_debt_limit','restaurant_debt_limit'])data[key]=Number($('commerce_'+key).value);await rpc('settings_save',data);await load();});};
+ $('commerceForm').onsubmit=e=>{e.preventDefault();return run(async()=>{const data={};for(const key of ['commission_percent','service_fee','captain_debt_limit','restaurant_debt_limit','restaurant_min_distance_m','restaurant_max_distance_m'])data[key]=Number($('commerce_'+key).value);if(!Number.isInteger(data.restaurant_min_distance_m)||!Number.isInteger(data.restaurant_max_distance_m)||data.restaurant_min_distance_m<0||data.restaurant_max_distance_m<=data.restaurant_min_distance_m||data.restaurant_max_distance_m>1000000)throw new Error('أدخل نطاقًا صحيحًا؛ أقصى مسافة لازم تكون أكبر من أقل مسافة');await rpc('settings_save',data);await load();});};
  $('commerceRefresh').onclick=()=>run(load);
  async function complaints(){
   const rows=await rpc('complaints');$('restaurantComplaints').replaceChildren(...rows.map(c=>{const row=text('article','');row.className='record';row.append(text('strong',`${c.restaurant_name} — ${c.captain_name}`),text('p',phone(c.captain_phone)),text('p',c.body),text('small',c.status==='handled'?'تم التعامل':'جديدة'));if(c.status==='open'){const b=text('button','تم التعامل');b.disabled=!canEdit('support');b.onclick=()=>run(async()=>{await rpc('complaint_handle',{id:c.id});await complaints();});row.append(b);}return row;}));
