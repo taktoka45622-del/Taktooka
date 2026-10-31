@@ -44,6 +44,7 @@ var role = 'owner';
 List<Json> savedFavorites = [];
 List<Json> savedTemplate = [];
 Json? savedMeal;
+bool failTemplate = false;
 final shop = <String, dynamic>{
   'id': shopId,
   'owner_id': actor,
@@ -192,6 +193,12 @@ void main() {
         } else {
           final p = request.body.isEmpty ? {} : jsonDecode(request.body) as Map;
           final action = p['p_action'];
+          if (action == 'category_options' && failTemplate)
+            return http.Response(
+              jsonEncode({'message': 'template unavailable', 'code': 'XX000'}),
+              400,
+              headers: {'content-type': 'application/json'},
+            );
           if (const bool.fromEnvironment('TRACE_LAYOUT'))
             print('RPC ${request.method} ${request.url.path}: $action');
           data = switch (action) {
@@ -898,6 +905,77 @@ void main() {
         expect(tester.takeException(), isNull);
       } finally {
         savedTemplate = [];
+        await close(tester, b);
+      }
+    },
+  );
+  testWidgets(
+    'failed template load cannot erase saved category extras and can retry',
+    (tester) async {
+      role = 'owner';
+      failTemplate = true;
+      final b = PreviewBackend()
+        ..profile = {'captain': false}
+        ..commerce = responseMe;
+      try {
+        await open(
+          tester,
+          MealEditorPage(b: b, meal: {...meal, 'previous_price': null}),
+          const Size(390, 844),
+          1,
+        );
+        await tester.ensureVisible(
+          find.byType(DropdownButtonFormField<String>).first,
+        );
+        await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('بيتزا').last);
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 80)),
+        );
+        await tester.pump();
+        await tester.scrollUntilVisible(
+          find.text('حفظ الوجبة'),
+          250,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'حفظ الوجبة'),
+              )
+              .onPressed,
+          isNull,
+        );
+        failTemplate = false;
+        await tester.scrollUntilVisible(
+          find.text('إعادة تحميل إضافات القسم'),
+          -250,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.tap(find.text('إعادة تحميل إضافات القسم'));
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 80)),
+        );
+        await tester.pump();
+        await tester.scrollUntilVisible(
+          find.text('حفظ الوجبة'),
+          250,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(
+          tester
+              .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'حفظ الوجبة'),
+              )
+              .onPressed,
+          isNotNull,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        failTemplate = false;
         await close(tester, b);
       }
     },

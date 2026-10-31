@@ -25,6 +25,8 @@ class _MealEditorPageState extends State<MealEditorPage> {
   String? catalogCategory;
   List<Json> sizes = [], addons = [];
   bool saveCategoryAddons = true, optionsLoading = false;
+  bool optionsReady = true;
+  String? optionsError;
   int optionsGeneration = 0;
   @override
   void initState() {
@@ -65,17 +67,27 @@ class _MealEditorPageState extends State<MealEditorPage> {
 
   Future<void> loadCategoryOptions() async {
     final generation = ++optionsGeneration, target = category;
-    setState(() => optionsLoading = true);
+    setState(() {
+      optionsLoading = true;
+      optionsReady = false;
+      optionsError = null;
+    });
     try {
       final value = Json.from(
         await commerceRpc(widget.b, 'category_options', {'category': target})
             as Map,
       );
       if (mounted && generation == optionsGeneration)
-        setState(() => addons = Backend.rows(value['addons'] ?? []));
+        setState(() {
+          addons = Backend.rows(value['addons'] ?? []);
+          optionsReady = true;
+        });
     } catch (e) {
       if (mounted && generation == optionsGeneration)
-        setState(() => error = commerceError(e));
+        setState(() {
+          optionsError = commerceError(e);
+          error = optionsError;
+        });
     } finally {
       if (mounted && generation == optionsGeneration)
         setState(() => optionsLoading = false);
@@ -153,7 +165,19 @@ class _MealEditorPageState extends State<MealEditorPage> {
           keyboardType: numeric ? TextInputType.number : TextInputType.text,
           textDirection: numeric ? TextDirection.ltr : null,
           decoration: InputDecoration(suffixText: numeric ? 'د.ع' : null),
-          onChanged: numeric ? (_) => setState(() {}) : null,
+          onChanged: numeric
+              ? (_) => setState(() {
+                  if (controller == price &&
+                      sizes.isNotEmpty &&
+                      amount(price.text) != null &&
+                      amount(price.text)! > 0) {
+                    sizes = [
+                      {...sizes.first, 'price': amount(price.text)},
+                      ...sizes.skip(1),
+                    ];
+                  }
+                })
+              : null,
           validator: (v) {
             if (required && (v ?? '').trim().isEmpty) return 'هذا الحقل مطلوب';
             if (numeric &&
@@ -193,7 +217,11 @@ class _MealEditorPageState extends State<MealEditorPage> {
   }
 
   Future<void> save() async {
-    if (saving || uploading || optionsLoading || !form.currentState!.validate())
+    if (saving ||
+        uploading ||
+        optionsLoading ||
+        !optionsReady ||
+        !form.currentState!.validate())
       return;
     if (images.isEmpty) {
       setState(() => error = 'أضف صورة واحدة على الأقل للوجبة');
@@ -401,6 +429,12 @@ class _MealEditorPageState extends State<MealEditorPage> {
             const SizedBox(height: 18),
             field('وصف الوجبة', description, lines: 2),
             if (optionsLoading) const LinearProgressIndicator(),
+            if (optionsError != null)
+              TextButton.icon(
+                onPressed: optionsLoading ? null : loadCategoryOptions,
+                icon: const Icon(Icons.refresh),
+                label: const Text('إعادة تحميل إضافات القسم'),
+              ),
             FoodOptionsEditor(
               b: widget.b,
               sizes: sizes,
@@ -476,7 +510,9 @@ class _MealEditorPageState extends State<MealEditorPage> {
               ),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: saving || uploading || optionsLoading ? null : save,
+              onPressed: saving || uploading || optionsLoading || !optionsReady
+                  ? null
+                  : save,
               child: Text(saving ? 'جار الحفظ…' : 'حفظ الوجبة'),
             ),
             TextButton(
