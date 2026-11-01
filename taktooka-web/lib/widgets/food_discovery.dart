@@ -192,7 +192,7 @@ class FoodDiscovery extends StatelessWidget {
           ],
         ),
         SizedBox(
-          height: 330 * MediaQuery.textScalerOf(context).scale(1).clamp(1, 2),
+          height: 370 * MediaQuery.textScalerOf(context).scale(1).clamp(1, 2),
           child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: meals.length.clamp(0, 30), separatorBuilder: (_, __) => const SizedBox(width: 10), itemBuilder: (_, index) {
             final item = meals[index];
             return SizedBox(width: 178, child: Card(clipBehavior: Clip.antiAlias, child: InkWell(onTap: () => openMeal(item), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [

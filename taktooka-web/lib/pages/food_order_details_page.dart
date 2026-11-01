@@ -32,6 +32,11 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
   late Json order;
   bool loading = true, busy = false;
   String? error;
+  num get courierCommission {
+    if (order['delivery_mode'] == 'private') return 0;
+    if (order['captain_id'] == null && widget.b.commissionPlan) return ((order['delivery_fee'] as num? ?? 0) * (order['commission_percent'] as num? ?? 0) / 100).round();
+    return order['commission_amount'] as num? ?? 0;
+  }
   Timer? countdown;
   bool expirySilenced = false;
   int get secondsLeft {
@@ -433,7 +438,7 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
                     FoodOrderItem(item: Json.from(item), photo: photo),
                   const Divider(),
                   CommerceAmountRow(isCourier ? 'فلوس المطعم' : 'الطعام', order['food_total'] as num),
-                  if (isCourier) CommerceAmountRow('أجور التوصيل إلك', ((order['delivery_fee'] as num) - (order['commission_amount'] as num? ?? 0))),
+                  if (isCourier) CommerceAmountRow('أجور التوصيل إلك', ((order['delivery_fee'] as num) - courierCommission)),
                   CommerceAmountRow(
                     'أجرة التوصيل',
                     order['delivery_fee'] as num,
