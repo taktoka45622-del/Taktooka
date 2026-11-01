@@ -47,7 +47,9 @@ class _MealEditorPageState extends State<MealEditorPage> {
     sizes = Backend.rows((m['options'] as Map?)?['sizes'] ?? []);
     addons = Backend.rows((m['options'] as Map?)?['addons'] ?? []);
     if (widget.meal == null) loadCategoryOptions();
-    catalogCategory = m['catalog_category'];
+    catalogCategory = m['catalog_source'] == 'manual'
+        ? m['catalog_category']
+        : null;
     discounted = m['previous_price'] != null;
     available = m['available'] ?? true;
     sort = (m['sort_order'] as num? ?? 0).toInt();
@@ -243,6 +245,7 @@ class _MealEditorPageState extends State<MealEditorPage> {
         'previous_price': discounted ? amount(previous.text) : null,
         'category': category,
         'catalog_category': catalogCategory,
+        'catalog_mode': catalogCategory == null ? 'auto' : 'manual',
         'image_path': images.first,
         'image_paths': images,
         'available': available,
@@ -330,7 +333,11 @@ class _MealEditorPageState extends State<MealEditorPage> {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
                                 child: Image.network(
-                                  mediaUrl(supabaseUrl, 'restaurant-images', images[i]),
+                                  mediaUrl(
+                                    supabaseUrl,
+                                    'restaurant-images',
+                                    images[i],
+                                  ),
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, __, ___) =>
                                       const Icon(Icons.restaurant),
@@ -408,22 +415,33 @@ class _MealEditorPageState extends State<MealEditorPage> {
               label: const Text('إضافة قسم جديد للمطعم'),
             ),
             DropdownButtonFormField<String>(
-              initialValue: catalogCategory,
+              initialValue: catalogCategory ?? '__auto__',
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'القسم الرئيسي بالتطبيق',
               ),
-              hint: const Text('تصنيف تلقائي حسب الوجبة'),
-              items: const [
-                'الأكل الشرقي',
-                'الأكل الغربي',
-                'المشويات',
-                'الأسماك',
-                'الدجاج',
-                'الكيك',
-                'الحلويات',
-              ].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-              onChanged: (v) => setState(() => catalogCategory = v),
+              hint: const Text('تصنيف ذكي تلقائي'),
+              items:
+                  const [
+                        '__auto__',
+                        'الأكل الشرقي',
+                        'الأكل الغربي',
+                        'المشويات',
+                        'الأسماك',
+                        'الدجاج',
+                        'الكيك',
+                        'الحلويات',
+                        'أخرى',
+                      ]
+                      .map(
+                        (v) => DropdownMenuItem(
+                          value: v,
+                          child: Text(v == '__auto__' ? 'تصنيف ذكي تلقائي' : v),
+                        ),
+                      )
+                      .toList(),
+              onChanged: (v) =>
+                  setState(() => catalogCategory = v == '__auto__' ? null : v),
             ),
             const SizedBox(height: 18),
             field('وصف الوجبة', description, lines: 2),
