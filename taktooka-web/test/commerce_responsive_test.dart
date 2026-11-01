@@ -302,7 +302,10 @@ void main() {
     expect(snapshot, isA<Map>());
     expect(snapshot['restaurant'], isNotNull);
     final compatibility = PreviewBackend();
-    final supported = await commerceRpc(compatibility, 'me').timeout(const Duration(seconds: 3));
+    final supported = await commerceRpc(
+      compatibility,
+      'me',
+    ).timeout(const Duration(seconds: 3));
     expect(supported, isA<Map>());
     expect(supported['restaurant'], isNotNull);
     compatibility.dispose();
