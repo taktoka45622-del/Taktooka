@@ -255,7 +255,7 @@ void main() {
           final p = jsonDecode(request.body) as Map;
           if (p['p_action'] == 'category_save') {
             shop['menu_categories'] = [
-              ...shop['menu_categories'] as List? ?? [],
+              ...(shop['menu_categories'] as List? ?? []),
               p['p_data']['name'],
             ];
             data = {...shop};

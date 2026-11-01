@@ -1,3 +1,4 @@
+import 'package:taktooka/core/design.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'backend.dart';
