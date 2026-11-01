@@ -34,17 +34,33 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
   String? error;
   num get courierCommission {
     if (order['delivery_mode'] == 'private') return 0;
-    if (order['captain_id'] == null && widget.b.commissionPlan) return ((order['delivery_fee'] as num? ?? 0) * (order['commission_percent'] as num? ?? 0) / 100).round();
+    if (order['captain_id'] == null && widget.b.commissionPlan)
+      return ((order['delivery_fee'] as num? ?? 0) *
+              (order['commission_percent'] as num? ?? 0) /
+              100)
+          .round();
     return order['commission_amount'] as num? ?? 0;
   }
+
   Timer? countdown;
   bool expirySilenced = false;
   int get secondsLeft {
-    final expires = DateTime.tryParse('${order['courier_offer_expires_at'] ?? ''}') ?? DateTime.tryParse('${order['updated_at'] ?? ''}')?.add(const Duration(minutes: 2));
-    return expires == null ? 0 : expires.difference(widget.b.serverNow).inSeconds.clamp(0, 120);
+    final expires =
+        DateTime.tryParse('${order['courier_offer_expires_at'] ?? ''}') ??
+        DateTime.tryParse(
+          '${order['updated_at'] ?? ''}',
+        )?.add(const Duration(minutes: 2));
+    return expires == null
+        ? 0
+        : expires.difference(widget.b.serverNow).inSeconds.clamp(0, 120);
   }
+
   @override
-  void dispose() { countdown?.cancel(); super.dispose(); }
+  void dispose() {
+    countdown?.cancel();
+    super.dispose();
+  }
+
   Future<void> decline() async {
     if (busy) return;
     setState(() => busy = true);
@@ -52,9 +68,13 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
       await commerceRpc(widget.b, 'offer_decline', {'id': order['id']});
       await widget.b.silenceOffer?.call(order['request_offer_id']);
       if (mounted) Navigator.pop(context, false);
-    } catch (e) { if (mounted) setState(() => error = commerceError(e)); }
-    finally { if (mounted) setState(() => busy = false); }
+    } catch (e) {
+      if (mounted) setState(() => error = commerceError(e));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
+
   @override
   void initState() {
     super.initState();
@@ -63,7 +83,15 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
     countdown = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || order['status'] != 'searching') return;
       setState(() {});
-      if (secondsLeft == 0 && !expirySilenced && order['request_offer_id'] != null) { expirySilenced = true; unawaited(widget.b.silenceOffer?.call(order['request_offer_id']) ?? Future<void>.value()); }
+      if (secondsLeft == 0 &&
+          !expirySilenced &&
+          order['request_offer_id'] != null) {
+        expirySilenced = true;
+        unawaited(
+          widget.b.silenceOffer?.call(order['request_offer_id']) ??
+              Future<void>.value(),
+        );
+      }
     });
   }
 
@@ -331,8 +359,22 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
                     ),
                   ),
                   children: [
-                    TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.taktooka.app', maxNativeZoom: 19, maxZoom: 19),
-                    PolylineLayer(polylines: [Polyline(points: [shop, customer], color: scarlet.withValues(alpha: .65), strokeWidth: 3)]),
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.taktooka.app',
+                      maxNativeZoom: 19,
+                      maxZoom: 19,
+                    ),
+                    PolylineLayer(
+                      polylines: [
+                        Polyline(
+                          points: [shop, customer],
+                          color: scarlet.withValues(alpha: .65),
+                          strokeWidth: 3,
+                        ),
+                      ],
+                    ),
                     MarkerLayer(
                       markers: [
                         Marker(
@@ -437,8 +479,15 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
                   for (final item in order['items'] as List? ?? [])
                     FoodOrderItem(item: Json.from(item), photo: photo),
                   const Divider(),
-                  CommerceAmountRow(isCourier ? 'فلوس المطعم' : 'الطعام', order['food_total'] as num),
-                  if (isCourier) CommerceAmountRow('أجور التوصيل إلك', ((order['delivery_fee'] as num) - courierCommission)),
+                  CommerceAmountRow(
+                    isCourier ? 'فلوس المطعم' : 'الطعام',
+                    order['food_total'] as num,
+                  ),
+                  if (isCourier)
+                    CommerceAmountRow(
+                      'أجور التوصيل إلك',
+                      ((order['delivery_fee'] as num) - courierCommission),
+                    ),
                   CommerceAmountRow(
                     'أجرة التوصيل',
                     order['delivery_fee'] as num,
@@ -479,10 +528,21 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
           if (isCourier && order['status'] == 'searching') ...[
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: busy || loading || error != null || secondsLeft <= 0 ? null : accept,
-              child: Text(busy ? 'جار قبول الطلب…' : secondsLeft <= 0 ? 'انتهت مهلة القبول' : 'موافقة — ${secondsLeft ~/ 60}:${(secondsLeft % 60).toString().padLeft(2, '0')}'),
+              onPressed: busy || loading || error != null || secondsLeft <= 0
+                  ? null
+                  : accept,
+              child: Text(
+                busy
+                    ? 'جار قبول الطلب…'
+                    : secondsLeft <= 0
+                    ? 'انتهت مهلة القبول'
+                    : 'موافقة — ${secondsLeft ~/ 60}:${(secondsLeft % 60).toString().padLeft(2, '0')}',
+              ),
             ),
-            OutlinedButton(onPressed: busy || secondsLeft <= 0 ? null : decline, child: const Text('إلغاء')),
+            OutlinedButton(
+              onPressed: busy || secondsLeft <= 0 ? null : decline,
+              child: const Text('إلغاء'),
+            ),
           ],
         ],
       ),

@@ -265,7 +265,16 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     if (n['screen'] == 'food' && n['request_type'] == 'courier') {
       if (foodNoticeOpen) return;
       foodNoticeOpen = true;
-      navigator.push(MaterialPageRoute(builder: (_) => FoodPage(b: backend, initialOrderId: n['order_id']?.toString()))).whenComplete(() => foodNoticeOpen = false);
+      navigator
+          .push(
+            MaterialPageRoute(
+              builder: (_) => FoodPage(
+                b: backend,
+                initialOrderId: n['order_id']?.toString(),
+              ),
+            ),
+          )
+          .whenComplete(() => foodNoticeOpen = false);
       return;
     }
     navigator.popUntil((route) => route.isFirst);
@@ -484,8 +493,9 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       0 => HomePage(
         b: backend,
         book: backend.commerce['vehicle'] == 'bike'
-            ? () => Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (_) => FoodPage(b: backend)))
+            ? () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => FoodPage(b: backend)))
             : book,
         lines: openLines,
         history: () => setState(() => tab = 1),

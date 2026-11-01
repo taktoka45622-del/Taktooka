@@ -550,10 +550,18 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
           ),
         ),
         const SizedBox(height: 16),
-        Row(
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 10,
+          runSpacing: 8,
           children: [
-            Expanded(child: Text('قائمة الطعام', style: heading(22))),
-            IconButton(tooltip: 'إضافة قسم', onPressed: busy ? null : addRestaurantCategory, icon: const Icon(Icons.playlist_add, color: scarlet)),
+            Text('قائمة الطعام', style: heading(22)),
+            OutlinedButton.icon(
+              onPressed: busy ? null : addRestaurantCategory,
+              icon: const Icon(Icons.playlist_add),
+              label: const Text('إضافة قسم'),
+            ),
             FilledButton.icon(
               style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
               onPressed: busy ? null : () => editItem(),
@@ -913,14 +921,16 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     return result;
   }
 
-  Future<void> requestPublicCourier(Json order) => change(order, 'searching', vehicle: 'tuktuk', deliveryMode: 'public');
+  Future<void> requestPublicCourier(Json order) =>
+      change(order, 'searching', vehicle: 'tuktuk', deliveryMode: 'public');
 
   Future<void> addRestaurantCategory() async {
     final value = await askText('إضافة قسم داخل المطعم');
     if (value == null || value.trim().isEmpty) return;
-    await run(() async { await commerceRpc(b, 'category_save', {'name': value.trim()}); });
+    await run(() async {
+      await commerceRpc(b, 'category_save', {'name': value.trim()});
+    });
   }
-
 
   Future<bool> change(
     Json o,
@@ -996,9 +1006,16 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   }
 
   Future<void> filterFoodPrices() async {
-    final result = await showFoodPriceFilter(context, minimum: minFoodPrice.toDouble(), maximum: maxFoodPrice.toDouble());
+    final result = await showFoodPriceFilter(
+      context,
+      minimum: minFoodPrice.toDouble(),
+      maximum: maxFoodPrice.toDouble(),
+    );
     if (result == null || !mounted) return;
-    setState(() { minFoodPrice = result.start.toInt(); maxFoodPrice = result.end.toInt(); });
+    setState(() {
+      minFoodPrice = result.start.toInt();
+      maxFoodPrice = result.end.toInt();
+    });
     _dataRevision++;
     await load();
   }
@@ -1197,21 +1214,24 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                       child: const Text('كابتن تكتوكة'),
                     ),
                     OutlinedButton(
-                        onPressed: busy
-                            ? null
-                            : () => change(
-                                o,
-                                'searching',
-                                deliveryMode: 'private',
-                              ),
-                        child: const Text('كابتن خاص'),
-                      ),
+                      onPressed: busy
+                          ? null
+                          : () =>
+                                change(o, 'searching', deliveryMode: 'private'),
+                      child: const Text('كابتن خاص'),
+                    ),
                   ],
                 ),
               if (owner && status == 'searching')
-                OutlinedButton(onPressed: busy ? null : () => change(o, 'preparing'), child: const Text('إلغاء البحث عن كابتن')),
+                OutlinedButton(
+                  onPressed: busy ? null : () => change(o, 'preparing'),
+                  child: const Text('إلغاء البحث عن كابتن'),
+                ),
               if (owner && ['preparing', 'searching'].contains(status))
-                TextButton(onPressed: busy ? null : () => change(o, 'rejected'), child: const Text('رفض الطلب — مع ذكر السبب')),
+                TextButton(
+                  onPressed: busy ? null : () => change(o, 'rejected'),
+                  child: const Text('رفض الطلب — مع ذكر السبب'),
+                ),
               if (courier && status == 'searching' && !mine)
                 FilledButton(
                   onPressed: busy ? null : () => openOrder(o),
@@ -1993,15 +2013,20 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                         Wrap(
                           spacing: 8,
                           children: [
-                            for (final c in [
+                            for (final c in {
                               'الكل',
-                              ...((owner ? restaurant['menu_categories'] : selected?['menu_categories']) as List? ?? const []).map((v) => '$v'),
+                              ...((owner
+                                              ? restaurant['menu_categories']
+                                              : selected?['menu_categories'])
+                                          as List? ??
+                                      const [])
+                                  .map((v) => '$v'),
                               ...menu
                                   .map(
                                     (m) => (m['category'] ?? 'أخرى').toString(),
                                   )
                                   .toSet(),
-                            ])
+                            })
                               ChoiceChip(
                                 label: Text(c),
                                 selected: categoryFilter == c,

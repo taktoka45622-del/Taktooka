@@ -133,7 +133,38 @@ class _RestaurantSettingsPageState extends State<RestaurantSettingsPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      actions: [TextButton.icon(onPressed: saving ? null : () async { final confirmed = await showDialog<bool>(context: context, builder: (d) => AlertDialog(title: const Text('تسجيل خروج'), content: const Text('تريد تسجّل خروج من حساب المطعم؟'), actions: [TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('رجوع')), FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('تسجيل خروج'))])); if (confirmed == true) { await widget.b.signOut(); if (context.mounted) Navigator.of(context).popUntil((route) => route.isFirst); } }, icon: const Icon(Icons.logout), label: const Text('تسجيل خروج'))],
+      actions: [
+        TextButton.icon(
+          onPressed: saving
+              ? null
+              : () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (d) => AlertDialog(
+                      title: const Text('تسجيل خروج'),
+                      content: const Text('تريد تسجّل خروج من حساب المطعم؟'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(d, false),
+                          child: const Text('رجوع'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(d, true),
+                          child: const Text('تسجيل خروج'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await widget.b.signOut();
+                    if (context.mounted)
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                  }
+                },
+          icon: const Icon(Icons.logout),
+          label: const Text('تسجيل خروج'),
+        ),
+      ],
       title: Text(
         widget.restaurant.isEmpty ? 'تسجيل المطعم' : 'إعدادات المطعم',
       ),

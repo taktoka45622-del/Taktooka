@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/food_price_filter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taktooka/services/media_url.dart';
@@ -103,4 +104,41 @@ void main() {
     expect(find.text('ماكو وجبات مطابقة للبحث'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'price filter validates input and keeps the slider synchronized',
+    (tester) async {
+      RangeValues? selected;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async {
+                  selected = await showFoodPriceFilter(context);
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, '3000');
+      await tester.enterText(find.byType(TextField).last, '1000');
+      await tester.tap(find.text('تطبيق'));
+      await tester.pump();
+      expect(find.text('أدخل نطاقًا صحيحًا بين 0 و100,000'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).last, '5000');
+      await tester.pump();
+      expect(
+        tester.widget<RangeSlider>(find.byType(RangeSlider)).values,
+        const RangeValues(3000, 5000),
+      );
+      await tester.tap(find.text('تطبيق'));
+      await tester.pumpAndSettle();
+      expect(selected, const RangeValues(3000, 5000));
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

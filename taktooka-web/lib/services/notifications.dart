@@ -145,8 +145,9 @@ Future<void> _displayNotice(
             ? const RawResourceAndroidNotificationSound('captain_request')
             : null,
         timeoutAfter: offer
-            ? offerRingDuration(DateTime.tryParse('${n['expires_at']}'))
-                  .inMilliseconds
+            ? offerRingDuration(
+                DateTime.tryParse('${n['expires_at']}'),
+              ).inMilliseconds
             : null,
         additionalFlags: offer && ring ? Int32List.fromList([4]) : null,
         ticker: offer
@@ -371,7 +372,8 @@ class NotificationCenter extends ChangeNotifier {
       permissionDenied =
           settings.authorizationStatus == AuthorizationStatus.denied;
       if (permissionDenied) {
-        deviceError = 'إشعارات الجهاز متوقفة. اسمح بها من إعدادات الهاتف ← التطبيقات ← تكتوكة ← الإشعارات.';
+        deviceError =
+            'إشعارات الجهاز متوقفة. اسمح بها من إعدادات الهاتف ← التطبيقات ← تكتوكة ← الإشعارات.';
         return;
       }
       if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -498,9 +500,9 @@ class NotificationCenter extends ChangeNotifier {
     if (uid == null || loading || closed) return;
     loading = true;
     try {
-      final values = Backend.rows(await rpc('list'))
-          .where((n) => n['kind'] != 'pricing_update')
-          .toList();
+      final values = Backend.rows(
+        await rpc('list'),
+      ).where((n) => n['kind'] != 'pricing_update').toList();
       if (uid != user || closed) return;
       final previous = inbox.map((n) => n['id']).toSet();
       final incoming = loadedInbox
@@ -554,9 +556,15 @@ class NotificationCenter extends ChangeNotifier {
       unawaited(
         showDeviceNotice(n, ring: !isIncomingRequest(n) || !foreground),
       );
-      if (isFoodRequest(n) && n['request_type'] == 'courier' && foreground && !noticeExpired(n) && surfacedFood.add('${n['user_id']}:${n['offer_id']}')) {
+      if (isFoodRequest(n) &&
+          n['request_type'] == 'courier' &&
+          foreground &&
+          !noticeExpired(n) &&
+          surfacedFood.add('${n['user_id']}:${n['offer_id']}')) {
         if (surfacedFood.length > 200) surfacedFood.remove(surfacedFood.first);
-        scheduleMicrotask(() { if (!closed && foreground && !noticeExpired(n)) open(n); });
+        scheduleMicrotask(() {
+          if (!closed && foreground && !noticeExpired(n)) open(n);
+        });
       }
       if (isIncomingRequest(n)) {
         unawaited(backend.refresh());
