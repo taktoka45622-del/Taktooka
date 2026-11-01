@@ -761,12 +761,10 @@ void main() {
         );
         await tester.pump();
         expect(find.text('المطاعم المفضلة'), findsOneWidget);
-        final favorite = find
-            .descendant(
-              of: find.byType(FavoriteRestaurants),
-              matching: find.byType(InkWell),
-            )
-            .first;
+        final favorite = find.descendant(
+          of: find.byType(FavoriteRestaurants),
+          matching: find.text(shop['name'] as String),
+        );
         await tester.ensureVisible(favorite);
         await tester.tap(favorite);
         await tester.pump();
