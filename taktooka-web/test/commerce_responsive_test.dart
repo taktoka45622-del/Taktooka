@@ -45,6 +45,7 @@ List<Json> savedFavorites = [];
 List<Json> savedTemplate = [];
 Json? savedMeal;
 bool failTemplate = false;
+bool searchCatalog = false;
 final shop = <String, dynamic>{
   'id': shopId,
   'owner_id': actor,
@@ -146,7 +147,6 @@ void main() {
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
     await mockMapCacheDirectories();
-    // Freeze only the tile transport; Supabase retains its separate RPC fixture.
     http.runWithClient(
       () => PersistentMapClient.shared,
       () => MockClient(
@@ -210,7 +210,16 @@ void main() {
             'categories' => ['بركر', 'بيتزا'],
             'category_options' => {'addons': savedTemplate},
             'favorites' => savedFavorites,
-            'catalog' => [],
+            'catalog' =>
+              searchCatalog
+                  ? [
+                      {
+                        ...meal,
+                        'restaurant_id': shopId,
+                        'restaurant_name': shop['name'],
+                      },
+                    ]
+                  : [],
             'accounts' => {
               'statistics': [],
               'debts': [],
@@ -978,6 +987,92 @@ void main() {
       }
     },
   );
+  testWidgets(
+    'food back restores restaurant list and previous tab without leaving food',
+    (tester) async {
+      role = 'customer';
+      final b = PreviewBackend()
+        ..profile = {'captain': false}
+        ..commerce = responseMe;
+      Future<void> settleData() async {
+        await tester.pump();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 90)),
+        );
+        await tester.pump();
+        await tester.pump();
+      }
+
+      try {
+        await open(tester, FoodPage(b: b), const Size(390, 844), 1);
+        final restaurant = find.text(shop['name'] as String).last;
+        await tester.ensureVisible(restaurant);
+        await tester.tap(restaurant);
+        await settleData();
+        expect(find.text('كل المطاعم'), findsOneWidget);
+        await tester.tap(find.byType(BackButton).first);
+        await settleData();
+        expect(find.byType(FoodPage), findsOneWidget);
+        expect(find.text('شنو مشتهي اليوم؟'), findsOneWidget);
+        expect(find.text('كل المطاعم'), findsNothing);
+        await tester.ensureVisible(find.text('طلباتي').first);
+        await tester.tap(find.text('طلباتي').first);
+        await settleData();
+        expect(find.text('شنو مشتهي اليوم؟'), findsNothing);
+        await tester.binding.handlePopRoute();
+        await settleData();
+        expect(find.byType(FoodPage), findsOneWidget);
+        expect(find.text('شنو مشتهي اليوم؟'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await close(tester, b);
+      }
+    },
+  );
+
+  testWidgets(
+    'food search survives opening a meal and back restores the query',
+    (tester) async {
+      role = 'customer';
+      searchCatalog = true;
+      final b = PreviewBackend()
+        ..profile = {'captain': false}
+        ..commerce = responseMe;
+      Future<void> settleData() async {
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+      }
+
+      try {
+        await open(tester, FoodPage(b: b), const Size(390, 844), 1);
+        await tester.ensureVisible(find.byType(TextField).first);
+        await tester.tap(find.byType(TextField).first);
+        await settleData();
+        await tester.enterText(find.byType(TextField).last, 'بركر');
+        await settleData();
+        await tester.tap(find.text(meal['name'] as String).first);
+        await settleData();
+        expect(find.byType(MealDetailsPage), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await settleData();
+        expect(find.text('البحث عن الطعام'), findsOneWidget);
+        expect(find.text('بركر'), findsOneWidget);
+        await tester.tap(find.byType(BackButton).first);
+        await settleData();
+        expect(find.text('شنو مشتهي اليوم؟'), findsOneWidget);
+        expect(find.text('كل المطاعم'), findsNothing);
+        expect(tester.takeException(), isNull);
+      } finally {
+        searchCatalog = false;
+        await close(tester, b);
+      }
+    },
+  );
+
   testWidgets('capture loaded commerce screens', (tester) async {
     role = 'owner';
     final b = PreviewBackend()

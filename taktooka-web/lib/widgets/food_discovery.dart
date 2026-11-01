@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'favorite_restaurants.dart';
 
 import 'package:flutter/material.dart';
@@ -484,7 +485,6 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
                           '${item['restaurant_name'] ?? ''} · ${money(item['price'])}',
                         ),
                         onTap: () {
-                          Navigator.pop(context);
                           widget.open(item);
                         },
                       );

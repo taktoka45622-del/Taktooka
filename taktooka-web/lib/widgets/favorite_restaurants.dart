@@ -45,7 +45,6 @@ class FavoriteRestaurants extends StatelessWidget {
                                 ),
                                 title: Text(r['name'] ?? ''),
                                 onTap: () {
-                                  Navigator.pop(context);
                                   open(r);
                                 },
                               ),

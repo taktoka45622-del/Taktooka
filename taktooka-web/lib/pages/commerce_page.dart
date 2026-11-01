@@ -43,12 +43,14 @@ class FoodPage extends StatefulWidget {
   final bool register;
   final String? initialOrderId;
   final Json? initialRestaurant;
+  final List<double>? initialArea;
   const FoodPage({
     super.key,
     required this.b,
     this.register = false,
     this.initialOrderId,
     this.initialRestaurant,
+    this.initialArea,
   });
   @override
   State<FoodPage> createState() => _FoodPageState();
@@ -63,6 +65,8 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   bool offersOnly = false, locatingArea = false;
   Timer? searchTimer;
   Json? selected;
+  LocalHistoryEntry? restaurantEntry;
+  final List<LocalHistoryEntry> foodHistory = [];
   final cart = FoodCart();
   final foodScroll = ScrollController();
   late final RestaurantFavorites favorites;
@@ -89,14 +93,18 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     me = Json.from(b.commerce);
+    if (widget.initialArea != null) {
+      _restaurantArea = List<double>.from(widget.initialArea!);
+      _manualRestaurantArea = true;
+    }
     final point = b.knownPosition;
     selected =
         widget.initialRestaurant != null &&
-            point != null &&
-            restaurantWithinRange(widget.initialRestaurant!, [
-              point.latitude,
-              point.longitude,
-            ])
+            restaurantWithinRange(
+              widget.initialRestaurant!,
+              _restaurantArea ??
+                  (point == null ? null : [point.latitude, point.longitude]),
+            )
         ? widget.initialRestaurant
         : null;
     favorites = favoritesFor(b)..addListener(_favoritesChanged);
@@ -671,7 +679,49 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> openShop(Json shop) async {
+  LocalHistoryEntry rememberFood(VoidCallback restore) {
+    late LocalHistoryEntry entry;
+    entry = LocalHistoryEntry(
+      onRemove: () {
+        foodHistory.remove(entry);
+        if (!mounted) return;
+        setState(() {
+          restore();
+          _dataRevision++;
+        });
+        unawaited(load(silent: true));
+      },
+    );
+    foodHistory.add(entry);
+    ModalRoute.of(context)!.addLocalHistoryEntry(entry);
+    return entry;
+  }
+
+  void selectFoodTab(int value) {
+    if (tab == value) return;
+    final previous = tab;
+    rememberFood(() => tab = previous);
+    setState(() => tab = value);
+    _dataRevision++;
+    load();
+  }
+
+  Future<void> openCatalogMeal(Json item) async {
+    final matches = shops.where((r) => r['id'] == item['restaurant_id']);
+    if (matches.isEmpty) return;
+    final previousEntry = restaurantEntry;
+    await openShop(matches.first, inline: true);
+    if (!mounted || selected?['id'] != item['restaurant_id']) return;
+    final openedEntry = restaurantEntry;
+    try {
+      final matches = menu.where((m) => m['id'] == item['id']);
+      if (matches.isNotEmpty) await openMeal(matches.first);
+    } finally {
+      if (mounted && openedEntry != previousEntry) openedEntry?.remove();
+    }
+  }
+
+  Future<void> openShop(Json shop, {bool inline = false}) async {
     if (!owner && !restaurantWithinRange(shop, _restaurantArea)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -680,12 +730,39 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
       );
       return;
     }
+    if (!inline && ModalRoute.of(context)?.isCurrent == false) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => FoodPage(
+            b: b,
+            initialRestaurant: shop,
+            initialArea: _restaurantArea,
+          ),
+        ),
+      );
+      return;
+    }
+    final previousShop = selected;
+    final previousMenu = menu;
+    final previousEntry = restaurantEntry;
+    final previousTab = tab;
     await run(() async {
-      menu = Backend.rows(
+      final nextMenu = Backend.rows(
         await commerceRpc(b, 'menu', {'restaurant_id': shop['id']}),
       );
       if (mounted) {
-        setState(() => selected = shop);
+        if (previousShop?['id'] != shop['id']) {
+          restaurantEntry = rememberFood(() {
+            selected = previousShop;
+            menu = previousMenu;
+            tab = previousTab;
+            restaurantEntry = previousEntry;
+          });
+        }
+        setState(() {
+          selected = shop;
+          menu = nextMenu;
+        });
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && foodScroll.hasClients) foodScroll.jumpTo(0);
         });
@@ -1559,7 +1636,9 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
         style: heading(21),
       ),
       centerTitle: true,
-      leading: owner
+      leading: foodHistory.isNotEmpty
+          ? BackButton(onPressed: () => Navigator.maybePop(context))
+          : owner
           ? IconButton(
               tooltip: 'إعدادات المطعم',
               onPressed: busy ? null : editRestaurant,
@@ -1571,8 +1650,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
           IconButton(
             tooltip: 'الطلبات الجديدة',
             onPressed: () {
-              setState(() => tab = 1);
-              load();
+              selectFoodTab(1);
             },
             icon: Badge(
               isLabelVisible: orders.any((o) => o['status'] == 'pending'),
@@ -1748,8 +1826,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                             Expanded(
                               child: InkWell(
                                 onTap: () {
-                                  setState(() => tab = entry.$1);
-                                  load();
+                                  selectFoodTab(entry.$1);
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -1888,18 +1965,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                           },
                           chooseLocation: () => chooseRestaurantArea(),
                           openRestaurant: openShop,
-                          openMeal: (i) async {
-                            final match = shops.where(
-                              (r) => r['id'] == i['restaurant_id'],
-                            );
-                            if (match.isNotEmpty) {
-                              await openShop(match.first);
-                              final meal = menu.where(
-                                (m) => m['id'] == i['id'],
-                              );
-                              if (meal.isNotEmpty) await openMeal(meal.first);
-                            }
-                          },
+                          openMeal: openCatalogMeal,
                           photo: photo,
                           banner: HomeBanners(
                             backend: b,
@@ -1920,13 +1986,13 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                                   );
                                   return;
                                 }
-                                await openShop(matches.first);
                                 if (mealId != null) {
-                                  final found = menu.where(
-                                    (m) => m['id'] == mealId,
-                                  );
-                                  if (found.isNotEmpty)
-                                    await openMeal(found.first);
+                                  await openCatalogMeal({
+                                    'id': mealId,
+                                    'restaurant_id': restaurantId,
+                                  });
+                                } else {
+                                  await openShop(matches.first);
                                 }
                               },
                               images: rows
@@ -1962,9 +2028,13 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                         if (!owner)
                           TextButton(
                             onPressed: () {
-                              setState(() {
-                                selected = null;
-                              });
+                              if (restaurantEntry != null) {
+                                restaurantEntry!.remove();
+                              } else {
+                                setState(() => selected = null);
+                                _dataRevision++;
+                                load();
+                              }
                               if (foodScroll.hasClients) foodScroll.jumpTo(0);
                             },
                             child: const Text('كل المطاعم'),
