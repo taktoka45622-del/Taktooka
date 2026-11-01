@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:taktooka/models/address_choice.dart';
 import 'package:taktooka/pages/food_checkout_page.dart';
 import 'package:taktooka/pages/registration_choice_page.dart';
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -42,6 +43,7 @@ import 'map_test_support.dart';
 const actor = '11111111-1111-4111-8111-111111111111';
 const shopId = '22222222-2222-4222-8222-222222222222';
 var role = 'owner';
+bool hasPrivateCourier = false;
 List<Json> savedFavorites = [];
 List<Json> savedTemplate = [];
 Json? savedMeal;
@@ -108,6 +110,7 @@ final settlement = <String, dynamic>{
   'created_at': '2026-10-31T08:30:00Z',
 };
 Map<String, dynamic> get responseMe => {
+  'has_private_courier': hasPrivateCourier,
   'restaurant': role == 'owner' ? shop : null,
   'restaurant_stats': {'today_orders': 125, 'today_sales': 1250000},
   'restaurant_min_distance_m': 999999,
@@ -306,9 +309,8 @@ void main() {
         supportedLocales: const [Locale('ar')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(scale)),
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(scale)),
           child: Directionality(
             textDirection: TextDirection.rtl,
             child: GenderScope(
@@ -1064,7 +1066,12 @@ void main() {
         expect(find.text('بركر'), findsOneWidget);
         await tester.pump(const Duration(seconds: 1));
         await tester.pump();
-        final searchBack = find.descendant(of: find.byType(FoodSearchPage), matching: find.byType(BackButton)).hitTestable();
+        final searchBack = find
+            .descendant(
+              of: find.byType(FoodSearchPage),
+              matching: find.byType(BackButton),
+            )
+            .hitTestable();
         expect(searchBack, findsOneWidget);
         await tester.tap(searchBack);
         await settleData();
@@ -1077,6 +1084,42 @@ void main() {
       }
     },
   );
+
+  for (final hasPrivate in [false, true]) {
+    testWidgets(
+      'restaurant shows only its configured courier button $hasPrivate',
+      (tester) async {
+        role = 'owner';
+        hasPrivateCourier = hasPrivate;
+        final b = PreviewBackend()
+          ..profile = {'captain': false}
+          ..commerce = responseMe;
+        try {
+          await open(tester, FoodPage(b: b), const Size(390, 844), 1);
+          await tester.ensureVisible(find.text('الطلبات').first);
+          await tester.tap(find.text('الطلبات').first);
+          await tester.pump();
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 100)),
+          );
+          await tester.pump();
+          await tester.pump();
+          expect(
+            find.text(hasPrivate ? 'طلب كابتن خاص' : 'طلب كابتن تكتوكة'),
+            findsOneWidget,
+          );
+          expect(
+            find.text(hasPrivate ? 'طلب كابتن تكتوكة' : 'طلب كابتن خاص'),
+            findsNothing,
+          );
+          expect(tester.takeException(), isNull);
+        } finally {
+          hasPrivateCourier = false;
+          await close(tester, b);
+        }
+      },
+    );
+  }
 
   testWidgets('capture loaded commerce screens', (tester) async {
     role = 'owner';
@@ -1174,9 +1217,8 @@ void main() {
                 .toImage(pixelRatio: 2);
         final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
         Directory('verification/responsive').createSync(recursive: true);
-        File(
-          'verification/responsive/${sample.$1}.png',
-        ).writeAsBytesSync(bytes!.buffer.asUint8List());
+        File('verification/responsive/${sample.$1}.png')
+            .writeAsBytesSync(bytes!.buffer.asUint8List());
         image.dispose();
       });
       await tester.pump(const Duration(seconds: 15));

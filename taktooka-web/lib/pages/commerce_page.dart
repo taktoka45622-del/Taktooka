@@ -294,8 +294,8 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     await load();
   }
 
-  Future<AddressChoice?> location(String title) =>
-      Navigator.of(context).push<AddressChoice>(
+  Future<AddressChoice?> location(String title) => Navigator.of(context)
+      .push<AddressChoice>(
         MaterialPageRoute(
           builder: (_) => FavoritePlacePicker(b: b, title: title),
         ),
@@ -1206,22 +1206,18 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                 ),
               ],
               if (owner && ['preparing', 'searching'].contains(status))
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    FilledButton(
-                      onPressed: busy ? null : () => requestPublicCourier(o),
-                      child: const Text('كابتن تكتوكة'),
-                    ),
-                    OutlinedButton(
-                      onPressed: busy
-                          ? null
-                          : () =>
-                                change(o, 'searching', deliveryMode: 'private'),
-                      child: const Text('كابتن خاص'),
-                    ),
-                  ],
-                ),
+                if (me['has_private_courier'] == true)
+                  OutlinedButton(
+                    onPressed: busy
+                        ? null
+                        : () => change(o, 'searching', deliveryMode: 'private'),
+                    child: const Text('طلب كابتن خاص'),
+                  )
+                else
+                  FilledButton(
+                    onPressed: busy ? null : () => requestPublicCourier(o),
+                    child: const Text('طلب كابتن تكتوكة'),
+                  ),
               if (owner && status == 'searching')
                 OutlinedButton(
                   onPressed: busy ? null : () => change(o, 'preparing'),
@@ -1307,8 +1303,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                           if (matches.isEmpty) {
                             if (mounted)
                               setState(
-                                () => error =
-                                    'المطعم مغلق حالياً أو غير متاح؛ جرّب لاحقاً',
+                                () => error = 'المطعم مغلق حالياً أو غير متاح؛ جرّب لاحقاً',
                               );
                             return;
                           }
@@ -1454,10 +1449,9 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                           : () => run(() async {
                               final value = Json.from(
                                 await commerceRpc(b, 'settlement_request', {
-                                      'kind': 'captain_restaurant',
-                                      'captain_id': g.key,
-                                    })
-                                    as Map,
+                                  'kind': 'captain_restaurant',
+                                  'captain_id': g.key,
+                                }) as Map,
                               );
                               if (!mounted) return;
                               await showRestaurantSettlementCode(
@@ -1491,11 +1485,14 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                               );
                               if (code == null) return;
                               await run(() async {
-                                final result =
-                                    await commerceRpc(b, 'settlement_confirm', {
-                                      'id': pending.first['id'],
-                                      'code': westernDigits(code),
-                                    });
+                                final result = await commerceRpc(
+                                  b,
+                                  'settlement_confirm',
+                                  {
+                                    'id': pending.first['id'],
+                                    'code': westernDigits(code),
+                                  },
+                                );
                                 if (result['ok'] != true)
                                   throw StateError(result['error']);
                               });

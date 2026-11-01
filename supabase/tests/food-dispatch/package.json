@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node dispatch.test.mjs && node --import tsx core.test.ts"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.14",
+    "h3-js": "4.4.0",
+    "tsx": "4.21.0"
+  }
+}
