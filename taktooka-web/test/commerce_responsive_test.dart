@@ -253,6 +253,13 @@ void main() {
         }
         if (request.body.isNotEmpty && request.url.path.contains('/rpc/')) {
           final p = jsonDecode(request.body) as Map;
+          if (p['p_action'] == 'category_save') {
+            shop['menu_categories'] = [
+              ...shop['menu_categories'] as List? ?? [],
+              p['p_data']['name'],
+            ];
+            data = {...shop};
+          }
           if (p['p_action'] == 'favorite_set') {
             savedFavorites = p['p_data']['saved'] == true ? [shop] : [];
             data = {'saved': p['p_data']['saved']};
@@ -1085,6 +1092,34 @@ void main() {
     },
   );
 
+  testWidgets('new restaurant category appears immediately after save', (
+    tester,
+  ) async {
+    role = 'owner';
+    final b = PreviewBackend()
+      ..profile = {'captain': false}
+      ..commerce = responseMe;
+    final previous = shop['menu_categories'];
+    try {
+      await open(tester, FoodPage(b: b), const Size(390, 844), 1);
+      final button = find.text('إضافة قسم');
+      await tester.ensureVisible(button);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'مشروبات');
+      await tester.tap(find.text('تأكيد'));
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('مشروبات'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      shop['menu_categories'] = previous;
+      await close(tester, b);
+    }
+  });
   for (final hasPrivate in [false, true]) {
     testWidgets(
       'restaurant shows only its configured courier button $hasPrivate',

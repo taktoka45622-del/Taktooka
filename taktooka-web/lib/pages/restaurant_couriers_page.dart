@@ -1,3 +1,5 @@
+import 'package:taktooka/services/food_contact.dart';
+
 import 'dart:async';
 
 import 'package:taktooka/core/display_format.dart';
@@ -294,6 +296,18 @@ class _RestaurantCouriersPageState extends State<RestaurantCouriersPage> {
                   icon: const Icon(Icons.call_outlined),
                   label: const Text('اتصال'),
                 ),
+                OutlinedButton.icon(
+                  onPressed: () => openFoodWhatsApp(
+                    c['phone'],
+                    message:
+                        'تكتوكة — مندوب المطعم\n${c['name']}\nحساب المطعم: ${money(c['due'])}\nطلبات موصلة: ${c['delivered'] ?? 0}',
+                  ),
+                  icon: const Icon(
+                    Icons.chat_outlined,
+                    color: Color(0xff128c7e),
+                  ),
+                  label: const Text('واتساب'),
+                ),
                 if (c['lat'] != null && c['lng'] != null)
                   OutlinedButton.icon(
                     onPressed: () => launchUrl(
@@ -336,10 +350,9 @@ class _RestaurantCouriersPageState extends State<RestaurantCouriersPage> {
                     : () => action(() async {
                         final value = Json.from(
                           await commerceRpc(widget.b, 'settlement_request', {
-                                'kind': 'captain_restaurant',
-                                'captain_id': c['user_id'],
-                              })
-                              as Map,
+                            'kind': 'captain_restaurant',
+                            'captain_id': c['user_id'],
+                          }) as Map,
                         );
                         if (mounted)
                           await showRestaurantSettlementCode(context, value);

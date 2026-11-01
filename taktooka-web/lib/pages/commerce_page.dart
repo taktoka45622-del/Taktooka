@@ -1,3 +1,7 @@
+import 'package:taktooka/services/food_catalog_cache.dart';
+import 'package:taktooka/services/food_contact.dart';
+import 'package:taktooka/services/restaurant_availability.dart';
+import 'package:taktooka/widgets/persistent_media_image.dart';
 import 'package:taktooka/widgets/food_price_filter.dart';
 import 'package:taktooka/services/restaurant_range.dart';
 import 'package:taktooka/services/media_url.dart';
@@ -70,6 +74,18 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   final List<LocalHistoryEntry> foodHistory = [];
   final cart = FoodCart();
   final foodScroll = ScrollController();
+  late final FoodCatalogCache catalogCache;
+  void catalogChanged() {
+    if (mounted && !busy) unawaited(load(silent: true));
+  }
+
+  void restoreFoodOffset(double value) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && foodScroll.hasClients)
+        foodScroll.jumpTo(value.clamp(0, foodScroll.position.maxScrollExtent));
+    });
+  }
+
   late final RestaurantFavorites favorites;
   bool busy = false, loading = true, foreground = true;
   String? error;
@@ -93,6 +109,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    catalogCache = FoodCatalogCache.forBackend(b)..addListener(catalogChanged);
     me = Json.from(b.commerce);
     if (widget.initialArea != null) {
       _restaurantArea = List<double>.from(widget.initialArea!);
@@ -153,6 +170,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     favorites.removeListener(_favoritesChanged);
     cart.removeListener(_favoritesChanged);
     cart.dispose();
+    catalogCache.removeListener(catalogChanged);
     foodScroll.dispose();
     privateTracking.removeListener(_trackingChanged);
     privateTracking.dispose();
@@ -238,8 +256,16 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
         accounts = Json.from(values[2] as Map);
         if (nextRestaurant != null) selected = nextRestaurant;
         if (nextMenu != null) menu = nextMenu;
-        if (nextShops != null) shops = nextShops;
-        if (nextCatalog != null) catalog = nextCatalog;
+        if (nextShops != null)
+          shops = nextShops
+              .where((r) => restaurantWithinRange(r, _restaurantArea))
+              .toList();
+        if (nextCatalog != null)
+          catalog = nextCatalog
+              .where(
+                (item) => shops.any((r) => r['id'] == item['restaurant_id']),
+              )
+              .toList();
         loading = false;
         error = null;
       });
@@ -376,7 +402,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                       Expanded(
                         child: InteractiveViewer(
                           child: Center(
-                            child: Image.network(
+                            child: PersistentMediaImage(
                               mediaUrl(
                                 supabaseUrl,
                                 'restaurant-images',
@@ -420,7 +446,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
       );
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
-      child: Image.network(
+      child: PersistentMediaImage(
         mediaUrl(supabaseUrl, 'restaurant-images', path),
         height: height,
         width: double.infinity,
@@ -433,15 +459,8 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     );
   }
 
-  bool get restaurantAvailable {
-    if (restaurant['open'] != true) return false;
-    final parts = '${restaurant['closing_time'] ?? ''}'.split(':');
-    if (parts.length < 2) return true;
-    final hour = int.tryParse(parts[0]), minute = int.tryParse(parts[1]);
-    if (hour == null || minute == null) return true;
-    final now = DateTime.now().toUtc().add(const Duration(hours: 3));
-    return now.hour * 60 + now.minute < hour * 60 + minute;
-  }
+  bool get restaurantAvailable =>
+      restaurantIsOpen(restaurant, now: b.serverNow);
 
   Future<void> setRestaurantOpen(bool value) => run(() async {
     if (value && b.enableOrderNotifications != null)
@@ -718,16 +737,20 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
 
   Future<void> openCatalogMeal(Json item) async {
     final matches = shops.where((r) => r['id'] == item['restaurant_id']);
-    if (matches.isEmpty) return;
-    final previousEntry = restaurantEntry;
-    await openShop(matches.first, inline: true);
-    if (!mounted || selected?['id'] != item['restaurant_id']) return;
-    final openedEntry = restaurantEntry;
+    if (matches.isEmpty || busy) return;
+    final offset = foodScroll.hasClients ? foodScroll.offset : 0.0;
+    final shop = matches.first;
     try {
-      final matches = menu.where((m) => m['id'] == item['id']);
-      if (matches.isNotEmpty) await openMeal(matches.first);
+      final items = Backend.rows(
+        await commerceRpc(b, 'menu', {'restaurant_id': shop['id']}),
+      );
+      if (!mounted) return;
+      final meals = items.where((m) => m['id'] == item['id']);
+      if (meals.isNotEmpty) await openMeal(meals.first, shopOverride: shop);
+    } catch (e) {
+      if (mounted) setState(() => error = commerceError(e));
     } finally {
-      if (mounted && openedEntry != previousEntry) openedEntry?.remove();
+      if (mounted) restoreFoodOffset(offset);
     }
   }
 
@@ -756,6 +779,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     final previousMenu = menu;
     final previousEntry = restaurantEntry;
     final previousTab = tab;
+    final previousOffset = foodScroll.hasClients ? foodScroll.offset : 0.0;
     await run(() async {
       final nextMenu = Backend.rows(
         await commerceRpc(b, 'menu', {'restaurant_id': shop['id']}),
@@ -767,6 +791,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
             menu = previousMenu;
             tab = previousTab;
             restaurantEntry = previousEntry;
+            restoreFoodOffset(previousOffset);
           });
         }
         setState(() {
@@ -780,9 +805,10 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> openMeal(Json item, {Json? previous}) async {
-    if (selected == null || busy) return;
-    final shop = Json.from(selected!);
+  Future<void> openMeal(Json item, {Json? previous, Json? shopOverride}) async {
+    if ((selected == null && shopOverride == null) || busy) return;
+    final shop = Json.from(shopOverride ?? selected!);
+    final savedOffset = foodScroll.hasClients ? foodScroll.offset : 0.0;
     final result = await Navigator.push<Json>(
       context,
       MaterialPageRoute(
@@ -799,6 +825,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
         ),
       ),
     );
+    if (mounted) restoreFoodOffset(savedOffset);
     if (result == null || !mounted) return;
     if (!cart.accepts(shop['id'])) {
       final replace = await showDialog<bool>(
@@ -896,29 +923,10 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   }
 
   Future<String?> askText(String title, {bool numeric = false}) async {
-    final c = TextEditingController();
-    final result = await showDialog<String>(
+    return showDialog<String>(
       context: context,
-      builder: (d) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: c,
-          keyboardType: numeric ? TextInputType.number : TextInputType.text,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(d),
-            child: const Text('رجوع'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(d, c.text.trim()),
-            child: const Text('تأكيد'),
-          ),
-        ],
-      ),
+      builder: (_) => FoodTextPrompt(title: title, numeric: numeric),
     );
-    c.dispose();
-    return result;
   }
 
   Future<void> requestPublicCourier(Json order) =>
@@ -928,7 +936,15 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     final value = await askText('إضافة قسم داخل المطعم');
     if (value == null || value.trim().isEmpty) return;
     await run(() async {
-      await commerceRpc(b, 'category_save', {'name': value.trim()});
+      final updated = await commerceRpc(b, 'category_save', {
+        'name': value.trim(),
+      });
+      if (mounted && updated is Map && updated['id'] != null)
+        setState(() {
+          me['restaurant'] = Json.from(updated);
+          selected = Json.from(updated);
+          categoryFilter = value.trim();
+        });
     });
   }
 
@@ -1042,7 +1058,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                       children: [
                         Text(o['restaurant_name'] ?? '', style: heading(18)),
                         Text(
-                          '#${o['id'].toString().split('-').first.toUpperCase()}',
+                          '#${foodOrderNumber(o)}',
                           style: const TextStyle(color: Colors.grey),
                         ),
                       ],
@@ -1167,10 +1183,24 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                     o['customer_phone'].toString(),
                     textDirection: TextDirection.ltr,
                   ),
-                  trailing: IconButton(
-                    tooltip: 'اتصال بالزبون',
-                    onPressed: () => callPhone(o['customer_phone']),
-                    icon: const Icon(Icons.call_outlined),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'اتصال بالزبون',
+                        onPressed: () => callPhone(o['customer_phone']),
+                        icon: const Icon(Icons.call_outlined),
+                      ),
+                      IconButton(
+                        tooltip: 'واتساب',
+                        onPressed: () =>
+                            openFoodWhatsApp(o['customer_phone'], order: o),
+                        icon: const Icon(
+                          Icons.chat_outlined,
+                          color: Color(0xff128c7e),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               if ((owner || courier) && o['captain_id'] != null)
@@ -1182,10 +1212,24 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                     o['captain_phone'] ?? '',
                     textDirection: TextDirection.ltr,
                   ),
-                  trailing: IconButton(
-                    tooltip: 'اتصال بالكابتن',
-                    onPressed: () => callPhone(o['captain_phone']),
-                    icon: const Icon(Icons.call_outlined),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'اتصال بالكابتن',
+                        onPressed: () => callPhone(o['captain_phone']),
+                        icon: const Icon(Icons.call_outlined),
+                      ),
+                      IconButton(
+                        tooltip: 'واتساب',
+                        onPressed: () =>
+                            openFoodWhatsApp(o['captain_phone'], order: o),
+                        icon: const Icon(
+                          Icons.chat_outlined,
+                          color: Color(0xff128c7e),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               if ((o['reason'] ?? '').toString().isNotEmpty)
@@ -1962,7 +2006,6 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                                 _dataRevision++;
                                 load();
                               }
-                              if (foodScroll.hasClients) foodScroll.jumpTo(0);
                             },
                             child: const Text('كل المطاعم'),
                           ),

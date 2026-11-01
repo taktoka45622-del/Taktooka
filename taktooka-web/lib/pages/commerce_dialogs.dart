@@ -170,3 +170,40 @@ Future<void> showRestaurantSettlementCode(BuildContext context, Json value) =>
         ),
       ),
     );
+
+class FoodTextPrompt extends StatefulWidget {
+  final String title;
+  final bool numeric;
+  const FoodTextPrompt({super.key, required this.title, this.numeric = false});
+  @override
+  State<FoodTextPrompt> createState() => _FoodTextPromptState();
+}
+
+class _FoodTextPromptState extends State<FoodTextPrompt> {
+  final controller = TextEditingController();
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: TextField(
+      controller: controller,
+      autofocus: true,
+      keyboardType: widget.numeric ? TextInputType.number : TextInputType.text,
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('رجوع'),
+      ),
+      FilledButton(
+        onPressed: () => Navigator.pop(context, controller.text.trim()),
+        child: const Text('تأكيد'),
+      ),
+    ],
+  );
+}

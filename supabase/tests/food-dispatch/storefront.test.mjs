@@ -1,0 +1,43 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+export async function storefrontChecks(db,{owner,customer,a,restaurant,order}) {
+ await db.exec(fs.readFileSync(new URL('./storefront-schema.sql',import.meta.url),'utf8'));
+ await db.exec(`create table public.tkt_home_banners(id uuid,meal_id uuid,restaurant_id uuid,enabled bool);create table public.tkt_messages(id uuid,user_id uuid,sender_id uuid,is_admin bool,body text);
+ create function tkt_private.extra(text,jsonb) returns jsonb language sql as $$select '{}'::jsonb$$;
+ create function tkt_private.food_delivery_fare(integer) returns integer language sql as $$select 2000$$;
+ update tkt_private.commerce_settings set restaurant_max_distance_m=15000,restaurant_debt_limit=100000,service_fee=500,commission_percent=10;
+ `);
+ await db.exec(fs.readFileSync(new URL('../../migrations/20261101074011_food_storefront_reliability.sql',import.meta.url),'utf8'));
+ const scalar=async(sql)=>(await db.query(sql)).rows[0];
+ const rpc=async(action,data={})=>(await db.query('select public.tkt_food_storefront($1,$2::jsonb) r',[action,JSON.stringify(data)])).rows[0].r;
+ await db.exec(`set test.uid='${owner}';update tkt_private.restaurants set open=true,closing_time=null where id='${restaurant}'`);
+ let result=await rpc('category_save',{name:'مشروبات'});
+ assert(result.menu_categories.includes('مشروبات'));assert((await rpc('categories')).includes('مشروبات'));console.log('PASS category save returns persisted category immediately');
+ await db.exec(`set test.uid='${customer}'`);
+ let forbidden=false;try{await rpc('category_save',{name:'unauthorized'});}catch(e){forbidden=e.message.includes('PERMISSION_DENIED');}assert(forbidden);console.log('PASS category ownership enforced');
+ await db.exec(`insert into tkt_private.restaurants(id,owner_id,name,location,open) values('99999999-9999-4999-8999-999999999999','${a}','far','[34.3,44.4]',true)`);
+ assert.equal((await rpc('restaurants',{location:[33.3,44.4]})).length,1);assert.equal((await rpc('restaurants',{})).length,0);console.log('PASS server filters distant restaurants and fails closed without location');
+ assert((await scalar(`select order_number from tkt_private.food_orders where id='${order}'`)).order_number>=100001);console.log('PASS existing orders get numeric order numbers');
+ await db.exec(`update tkt_private.restaurants set closing_time=((clock_timestamp() at time zone 'Asia/Baghdad')-interval '1 hour')::time where id='${restaurant}'`);
+ assert((await scalar(`select closing_at>clock_timestamp() as future from tkt_private.restaurants where id='${restaurant}'`)).future);console.log('PASS overnight closing schedules next occurrence in Baghdad');
+ await db.exec(`update tkt_private.restaurants set closing_at=clock_timestamp()-interval '1 second' where id='${restaurant}'`);
+ let closed=false;try{await db.exec(`insert into tkt_private.food_orders(id,restaurant_id,status) values(gen_random_uuid(),'${restaurant}','pending')`);}catch(e){closed=e.message.includes('RESTAURANT_UNAVAILABLE');}assert(closed);console.log('PASS expired deadline rejects orders before cron runs');
+ await db.exec('select tkt_private.close_scheduled_restaurants()');assert.equal((await scalar(`select open from tkt_private.restaurants where id='${restaurant}'`)).open,false);console.log('PASS scheduled closing turns receiving orders off');
+ assert.equal((await rpc('restaurants',{location:[33.3,44.4]})).length,0);
+
+ const item='77777777-7777-4777-8777-777777777777',quote='88888888-8888-4888-8888-888888888888';
+ await db.exec(`alter table tkt_private.food_orders alter column id set default gen_random_uuid();alter table tkt_private.food_orders alter column status set default 'pending';alter table tkt_private.food_orders alter column created_at set default clock_timestamp();alter table tkt_private.food_orders alter column updated_at set default clock_timestamp();
+ update tkt_private.restaurants set open=true where id='${restaurant}';
+ update public.tkt_profiles set captain=false where user_id='${customer}';
+ insert into tkt_private.restaurant_items(id,restaurant_id,name,price,image_path,options,available) values('${item}','${restaurant}','meal',1000,'meal.jpg','{"sizes":[],"addons":[]}',true);
+ insert into public.tkt_quotes(id,user_id,pickup,destination,distance_m,fare,expires_at,round_trip) values('${quote}','${customer}','[33.3,44.4]','[33.31,44.41]',1000,2000,clock_timestamp()+interval '5 minutes',false);
+ set test.uid='${customer}';`);
+ const created=await rpc('order_create',{request_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',restaurant_id:restaurant,quote_id:quote,items:[{id:item,quantity:1}],expected_food_total:1000,expected_delivery_fee:2000,expected_service_fee:500,customer_address:'test address'});
+ assert(created.order_number>100001);assert.equal(created.food_total,1000);assert.equal(created.delivery_fee,2000);console.log('PASS new numeric order preserves validated items and checkout pricing');
+ await db.exec(`set test.uid='${owner}';select set_config('tkt.support_order','${order}',true);insert into public.tkt_messages(id,user_id,sender_id,is_admin,body) values(gen_random_uuid(),'${owner}','${owner}',false,'help')`);
+ const message=await scalar('select context from public.tkt_messages limit 1');assert.equal(message.context.role,'صاحب مطعم');
+ await db.exec(`begin;set test.uid='${owner}';select set_config('tkt.support_order','${order}',true);insert into public.tkt_messages(id,user_id,sender_id,is_admin,body) values(gen_random_uuid(),'${owner}','${owner}',false,'order help');commit`);
+ const linked=(await db.query("select context from public.tkt_messages where body='order help'")).rows[0].context;
+ assert.equal(linked.order.id,order);assert(linked.order.order_number);console.log('PASS support stores verified role and authorized order context');
+ assert(!(await scalar("select has_table_privilege('anon','public.tkt_food_catalog_state','SELECT') allowed")).allowed);console.log('PASS catalog revision reveals no data to anonymous callers');
+}

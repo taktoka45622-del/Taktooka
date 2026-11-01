@@ -1,3 +1,4 @@
+import {storefrontChecks} from './storefront.test.mjs';
 process.on('unhandledRejection',e=>{console.error(e.message,e.where,e.internalQuery);process.exit(1);});
 import {PGlite} from '@electric-sql/pglite';
 import fs from 'node:fs';
@@ -87,4 +88,5 @@ assert(me.has_private_courier===false,'no active private captain shows Taktooka 
 assert(!(await scalar("select has_function_privilege('anon','public.tkt_food_dispatch_worker(text,jsonb)','EXECUTE') allowed")).allowed,'anonymous callers cannot invoke privileged worker');
 assert(!(await scalar("select has_table_privilege('authenticated','tkt_private.food_dispatch_offers','SELECT') allowed")).allowed,'offer data cannot be read directly by clients');
 console.log('All local dispatch checks passed');
+await storefrontChecks(db,{owner,customer,a,restaurant,order});
 await db.close();

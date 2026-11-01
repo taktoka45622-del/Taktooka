@@ -1,5 +1,8 @@
+import 'package:taktooka/services/commerce.dart';
+import 'package:taktooka/services/food_contact.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'package:taktooka/core/display_format.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,11 +19,13 @@ import 'package:taktooka/widgets/tuktuk_loader.dart';
 class ChatPage extends StatefulWidget {
   final Backend b;
   final String? room;
+  final String? orderId;
   final String title;
   const ChatPage({
     super.key,
     required this.b,
     this.room,
+    this.orderId,
     this.title = 'دعم تكتوكة',
   });
   @override
@@ -33,6 +38,20 @@ class _ChatPageState extends State<ChatPage> {
   List<Json> messages = [];
   bool sending = false, loading = true;
   String? error, pendingId;
+  Json identity = {};
+  List<Json> supportOrders = [];
+  String? selectedOrder;
+  Future<void> loadContext() async {
+    try {
+      final value = await commerceRpc(widget.b, 'support_context');
+      if (mounted && value is Map)
+        setState(() {
+          identity = Json.from(value);
+          supportOrders = Backend.rows(value['orders']);
+        });
+    } catch (_) {}
+  }
+
   Timer? timer;
   RealtimeChannel? channel;
   final _loadGate = RefreshGate();
@@ -40,6 +59,8 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    selectedOrder = widget.orderId;
+    unawaited(loadContext());
     load();
     timer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (mounted &&
@@ -126,11 +147,38 @@ class _ChatPageState extends State<ChatPage> {
     pendingId ??= const Uuid().v4();
     setState(() => sending = true);
     try {
-      await widget.b.extra('send', {
-        ...roomData,
-        'body': body,
-        'id': pendingId,
-      });
+      try {
+        await widget.b.db
+            .rpc(
+              'tkt_support_message',
+              params: {
+                'p_data': {
+                  ...roomData,
+                  'body': body,
+                  'id': pendingId,
+                  if (selectedOrder != null) 'order_id': selectedOrder,
+                },
+              },
+            )
+            .timeout(const Duration(seconds: 15));
+      } on PostgrestException catch (e) {
+        if (e.code != 'PGRST202' && e.code != '42883') rethrow;
+        final order = supportOrders
+            .where((o) => o['id'] == selectedOrder)
+            .firstOrNull;
+        final detail = order == null ? 'استفسار عام' : foodOrderMessage(order);
+        var header =
+            '${identity['role'] ?? ''} — ${identity['name'] ?? widget.b.profile?['name'] ?? ''}\n${identity['phone'] ?? widget.b.profile?['phone'] ?? ''}\n$detail';
+        if (header.length > 900) header = header.substring(0, 900);
+        if (body.length + header.length + 2 > 2000)
+          throw StateError('الرسالة طويلة؛ اختصر نص الرسالة إلى 1000 حرف');
+        await widget.b.extra('send', {
+          ...roomData,
+          'body': '$header\n\n$body',
+          'id': pendingId,
+        });
+      }
+
       if (!mounted) return;
       input.clear();
       pendingId = null;
@@ -153,6 +201,45 @@ class _ChatPageState extends State<ChatPage> {
         ),
         subtitle: const AppText('محادثة خاصة مع الإدارة'),
       ),
+      if (identity.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${identity['role'] ?? ''} — ${identity['name'] ?? ''}',
+                style: const TextStyle(color: Colors.grey),
+              ),
+              if (widget.room == null && supportOrders.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  initialValue:
+                      supportOrders.any((o) => o['id'] == selectedOrder)
+                      ? selectedOrder
+                      : null,
+                  decoration: const InputDecoration(
+                    labelText: 'موضوع المراسلة',
+                  ),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('استفسار عام'),
+                    ),
+                    for (final o in supportOrders)
+                      DropdownMenuItem<String>(
+                        value: o['id'],
+                        child: Text(
+                          'طلب #${foodOrderNumber(o)} — ${o['restaurant_name'] ?? ''}',
+                        ),
+                      ),
+                  ],
+                  onChanged: sending
+                      ? null
+                      : (v) => setState(() => selectedOrder = v),
+                ),
+            ],
+          ),
+        ),
       if (loading) const TuktukLoader(),
       if (error != null) TextButton(onPressed: load, child: AppText(error!)),
       Expanded(
@@ -185,6 +272,15 @@ class _ChatPageState extends State<ChatPage> {
                         fontSize: 10,
                       ),
                     ),
+                    if (m['context'] is Map &&
+                        (m['context']['subject'] == 'طلب طعام'))
+                      Text(
+                        'طلب #${foodOrderNumber(m['context']['order'] as Map? ?? {})}',
+                        style: TextStyle(
+                          color: own ? Colors.white70 : Colors.grey,
+                          fontSize: 12,
+                        ),
+                      ),
                     AppText(
                       m['body'],
                       style: TextStyle(

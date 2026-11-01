@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/persistent_media_image.dart';
 import 'package:taktooka/services/media_url.dart';
 import 'package:flutter/material.dart';
 import 'package:taktooka/core/commerce_theme.dart';
@@ -200,7 +201,7 @@ class _RestaurantSettingsPageState extends State<RestaurantSettingsPage> {
                 if (image.isNotEmpty)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
+                    child: PersistentMediaImage(
                       mediaUrl(supabaseUrl, 'restaurant-images', image),
                       height: 130,
                       width: double.infinity,

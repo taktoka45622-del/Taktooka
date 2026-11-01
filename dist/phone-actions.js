@@ -11,16 +11,16 @@ const pattern=()=>/(?<![0-9A-Za-z])(?:\+?964|00964|0)[ -]*7(?:[ -]*[0-9]){9}(?![
 export function findPhoneNumbers(value){return [...ascii(String(value||'')).matchAll(pattern())].map(m=>({text:m[0],index:m.index,phone:normalizeWhatsAppPhone(m[0])})).filter(m=>m.phone);}
 export function setupPhoneActions(document){
  const blocked='script,style,input,textarea,select,option,button,a,pre,code,.audit-details,.coupon-card-preview,[data-phone-contact],.leaflet-container';
- function link(phone){const a=document.createElement('a');a.href='https://wa.me/'+phone;a.target='_blank';a.rel='noopener noreferrer';a.className='whatsapp-link';a.dataset.phoneContact=phone;a.textContent='واتساب ↗';a.setAttribute('aria-label','فتح واتساب للرقم '+phone);a.title='فتح المحادثة في واتساب';return a;}
+ function link(phone,source){const a=document.createElement('a');const scope=source?.closest('[data-whatsapp-message],.chat-message,.record,.support-conversation');const message=scope?.dataset.whatsappMessage||scope?.textContent||'تكتوكة';a.href='https://wa.me/'+phone+'?text='+encodeURIComponent(message.slice(0,6000));a.target='_blank';a.rel='noopener noreferrer';a.className='whatsapp-link';a.dataset.phoneContact=phone;a.textContent='واتساب ↗';a.setAttribute('aria-label','فتح واتساب للرقم '+phone);a.title='فتح المحادثة في واتساب';return a;}
  function enhance(root){
   if(!root||root.nodeType!==1||root.closest(blocked))return;
   const conversations=[...(root.matches('.support-conversation')?[root]:[]),...root.querySelectorAll('.support-conversation')];
-  for(const row of conversations){const open=row.querySelector('.conversation-open');if(!open)continue;const found=[...open.querySelectorAll('strong,span,small')].flatMap(node=>findPhoneNumbers(node.textContent))[0];if(found&&!row.querySelector('a.whatsapp-link'))row.append(link(found.phone));}
+  for(const row of conversations){const open=row.querySelector('.conversation-open');if(!open)continue;const found=[...open.querySelectorAll('strong,span,small')].flatMap(node=>findPhoneNumbers(node.textContent))[0];if(found&&!row.querySelector('a.whatsapp-link'))row.append(link(found.phone,row));}
   const walker=document.createTreeWalker(root,4),nodes=[];let node;
   while((node=walker.nextNode()))if(node.parentElement&&!node.parentElement.closest(blocked)&&findPhoneNumbers(node.nodeValue).length)nodes.push(node);
   for(const node of nodes){
    const source=node.nodeValue,matches=findPhoneNumbers(source),fragment=document.createDocumentFragment();let at=0;
-   for(const m of matches){fragment.append(document.createTextNode(source.slice(at,m.index)));const wrap=document.createElement('span');wrap.className='phone-contact';wrap.dataset.phoneContact=m.phone;const number=document.createElement('bdi');number.className='phone-number';number.textContent=m.text;wrap.append(number,link(m.phone));fragment.append(wrap);at=m.index+m.text.length;}
+   for(const m of matches){fragment.append(document.createTextNode(source.slice(at,m.index)));const wrap=document.createElement('span');wrap.className='phone-contact';wrap.dataset.phoneContact=m.phone;const number=document.createElement('bdi');number.className='phone-number';number.textContent=m.text;wrap.append(number,link(m.phone,node.parentElement));fragment.append(wrap);at=m.index+m.text.length;}
    fragment.append(document.createTextNode(source.slice(at)));node.replaceWith(fragment);
   }
  }

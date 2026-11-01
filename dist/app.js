@@ -1,7 +1,7 @@
 import {createCommercePage} from './commerce.js?v=1.7.4';
 import {createServerMonitor} from './server-monitor.js?v=1';
 import {createAccountAdmin} from './account-admin.js?v=1.6.93';
-import {setupPhoneActions,normalizeWhatsAppPhone,whatsappUrl} from './phone-actions.js?v=1.6.91';
+import {setupPhoneActions,normalizeWhatsAppPhone,whatsappUrl} from './phone-actions.js?v=1.7.11';
 import {createGlobalSearch} from './global-search.js?v=1';
 import {createOperations} from './operations.js?v=1.6.90';
 import {playNoticeSound} from './notification-sound.js?v=1';
@@ -245,7 +245,7 @@ async function updateChat(){if(dialogRefreshing||dialogMode!=='chat')return;dial
  const rows=kind==='exchange'?await supportRpc('read',{agent_id:room.id}):kind==='support'?await manage('read',{user_id:room.user_id}):await manage('recovery_messages',{id:room.id});if(epoch!==dialogEpoch||dialogMode!=='chat')return;const sig=rows.map(m=>m.id).join(',');if(sig===chatSignature)return;const first=chatSignature===null;chatSignature=sig;supportDirty=true;scheduleLiveRefresh();
  const log=$('chatLog'),nearBottom=first||log.scrollHeight-log.scrollTop-log.clientHeight<60;log.replaceChildren();let day='';
  for(const m of rows){const date=new Date(m.created_at).toLocaleDateString('ar-IQ',{timeZone:'Asia/Baghdad'});if(date!==day){const label=text('span',date);label.className='chat-day';log.append(label);day=date;}
- const box=text('div','');box.className='chat-message'+(m.is_admin?' admin-message':'');const content=text('div','');content.className='message-content';appendLinks(content,m.body||'');box.append(content,text('small',`${m.is_admin?'الدعم':room.name||'المستخدم'} · ${displayTime(m.created_at)}`));log.append(box);
+ const box=text('div','');box.className='chat-message'+(m.is_admin?' admin-message':'');const content=text('div','');content.className='message-content';appendLinks(content,m.body||'');const context=m.context;if(context?.role){const info=text('div','');info.className='message-context';info.append(text('strong',`${context.role} — ${context.name||''}`),text('p',context.phone||''));if(context.restaurant_name)info.append(text('p',`${context.restaurant_name} · ${context.restaurant_phone||''} · ${context.restaurant_address||''}`));if(context.order){const o=context.order;info.append(text('strong','طلب الطعام #'+o.order_number),text('p',`الحالة: ${o.status} · الطعام ${money(o.food_total)} · التوصيل ${money(o.delivery_fee)}`));for(const [label,key] of [['المطعم','restaurant'],['الزبون','customer'],['الكابتن','captain']])if(o[key+'_name'])info.append(text('p',`${label}: ${o[key+'_name']} · ${o[key+'_phone']||''} · ${o[key+'_address']||''}`));for(const item of o.items||[])info.append(text('p',`${item.name} × ${item.quantity} — ${money(item.price)}`));box.dataset.whatsappMessage=info.textContent;}box.append(info);}box.append(content,text('small',`${m.is_admin?'الدعم':room.name||'المستخدم'} · ${displayTime(m.created_at)}`));log.append(box);
  }if(!rows.length)log.append(text('p','ابدأ المحادثة بإرسال رسالة.'));if(nearBottom)log.scrollTop=log.scrollHeight;
  }finally{dialogRefreshing=false}}
 function setMenu(open,record=true){if(record)navigationWillChange();const menu=$('dashboardMenu');if(open&&!$('admin').hidden){if(!menu.open)menu.showModal();}else if(menu.open)menu.close();document.body.classList.toggle('menu-open',menu.open);$('menuBackdrop').hidden=true;$('menuToggle').setAttribute('aria-expanded',String(menu.open));if(record)navigationChanged();}
@@ -527,7 +527,6 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)emergencyA
 
 
 
-// Promotional images are public; row/storage mutation permissions are admin-only.
 let bannerRows=[], bannerUploads=false;
 const bannerBucket=db.storage.from('taktooka-banners');
 async function loadBanners(){
@@ -580,7 +579,6 @@ $('reloadBanners').onclick=()=>run(loadBanners);
 $('bannerForm').onsubmit=e=>{e.preventDefault();if(bannerUploads)return;run(async()=>{
  const files=[...$('bannerFiles').files],slot=Number($('bannerSlot').value),title=$('bannerTitle').value.trim();
  if(!files.length||files.length>10)throw new Error('اختَر من صورة واحدة إلى 10 صور');
- // Validate the entire selection before starting any upload.
  for(const file of files)if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5242880)throw new Error('كل صورة لازم تكون JPG / PNG / WebP وأقل من 5 ميغابايت');
  bannerUploads=true;$('uploadBanners').disabled=true;let done=0;
  try{
@@ -597,7 +595,6 @@ $('bannerForm').onsubmit=e=>{e.preventDefault();if(bannerUploads)return;run(asyn
  finally{bannerUploads=false;$('uploadBanners').disabled=false;$('bannerProgress').textContent=`تم حفظ ${done} من ${files.length} صور`;await loadBanners()}
 })};
 
-// Inventory and spin results are determined transactionally by the server.
 async function wheelRpc(action,data={}){const {data:result,error}=await db.rpc('tkt_wheel',{p_action:action,p_data:data});if(error){if(error.message.includes('WHEEL_STOCK_CHANGED'))throw new Error('المخزون تغيّر بسبب لفة أو تعديل آخر؛ حدّث الصفحة قبل الحفظ');throw error}return result}
 let wheelData={},wheelClaims=[];
 async function loadWheel(more=false){

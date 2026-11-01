@@ -1,5 +1,6 @@
-import 'dart:async';
+import 'package:taktooka/services/food_contact.dart';
 
+import 'dart:async';
 
 import 'package:taktooka/core/display_format.dart';
 
@@ -443,6 +444,22 @@ class _FoodTrackingPageState extends State<FoodTrackingPage>
                   if (data?['captain'] != null)
                     Text(
                       '${data!['captain']['name']} · ${data!['captain']['phone']}',
+                    ),
+                  if (data?['captain']?['phone'] != null)
+                    TextButton.icon(
+                      onPressed: () => openFoodWhatsApp(
+                        data!['captain']['phone'],
+                        order: {
+                          ...order,
+                          'captain_name': data!['captain']['name'],
+                          'captain_phone': data!['captain']['phone'],
+                        },
+                      ),
+                      icon: const Icon(
+                        Icons.chat_outlined,
+                        color: Color(0xff128c7e),
+                      ),
+                      label: const Text('واتساب الكابتن'),
                     ),
                   if (active && captain == null)
                     const Text(

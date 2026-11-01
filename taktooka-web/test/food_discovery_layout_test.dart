@@ -1,3 +1,8 @@
+import 'package:taktooka/services/restaurant_availability.dart';
+import 'package:taktooka/services/food_contact.dart';
+import 'package:taktooka/widgets/persistent_media_image.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:taktooka/widgets/food_price_filter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +11,49 @@ import 'package:taktooka/services/restaurant_range.dart';
 import 'package:taktooka/widgets/food_discovery.dart';
 
 void main() {
+  test('closing deadline works across midnight and a closed restaurant stays closed', () {
+    final restaurant = {'open': true, 'closing_at': '2026-11-02T00:00:00Z'};
+    expect(
+      restaurantIsOpen(restaurant, now: DateTime.parse('2026-11-01T23:59:59Z')),
+      true,
+    );
+    expect(
+      restaurantIsOpen(restaurant, now: DateTime.parse('2026-11-02T00:00:00Z')),
+      false,
+    );
+    expect(restaurantIsOpen({'open': false}), false);
+  });
+  test('WhatsApp includes numeric order, all parties and amounts', () {
+    final uri = foodWhatsAppUri(
+      '07701234567',
+      order: {
+        'order_number': 123456,
+        'restaurant_name': 'مطعم',
+        'customer_name': 'زبون',
+        'captain_name': 'كابتن',
+        'food_total': 13000,
+        'delivery_fee': 2000,
+      },
+    );
+    expect(uri.path, '/9647701234567');
+    for (final label in ['123456', 'مطعم', 'زبون', 'كابتن', '13,000'])
+      expect(uri.queryParameters['text'], contains(label));
+  });
+  test('food media coalesces downloads and reuses cached bytes', () async {
+    var requests = 0;
+    final cache = FoodMediaCache(
+      client: MockClient((r) async {
+        requests++;
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+    );
+    const url = 'https://cache.test/unique-image';
+    final values = await Future.wait([cache.load(url), cache.load(url)]);
+    expect(values.first, [1, 2, 3]);
+    await cache.load(url);
+    expect(requests, 1);
+  });
+
   test('range excludes restaurants just beyond fifteen kilometres', () {
     const origin = [33.4, 44.4];
     expect(

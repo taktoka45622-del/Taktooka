@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/persistent_media_image.dart';
 import 'package:taktooka/services/media_url.dart';
 import 'package:taktooka/widgets/food_options_editor.dart';
 import 'package:flutter/material.dart';
@@ -332,7 +333,7 @@ class _MealEditorPageState extends State<MealEditorPage> {
                                     }),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
-                                child: Image.network(
+                                child: PersistentMediaImage(
                                   mediaUrl(
                                     supabaseUrl,
                                     'restaurant-images',

@@ -1,6 +1,7 @@
 import 'package:taktooka/services/backend.dart';
 import 'package:flutter/material.dart';
 import 'package:taktooka/core/design.dart';
+import 'package:taktooka/core/numeric_localizations.dart';
 
 Future<RangeValues?> showFoodPriceFilter(
   BuildContext context, {
@@ -22,6 +23,9 @@ class _FoodPriceFilterState extends State<_FoodPriceFilter> {
   late RangeValues range;
   late TextEditingController lower, upper;
   String? error;
+  String amount(num n) => money(n).replaceAll('د.ع', '').trim();
+  int? value(TextEditingController c) =>
+      int.tryParse(westernDigits(c.text).replaceAll(RegExp(r'[,\s]'), ''));
   @override
   void initState() {
     super.initState();
@@ -29,8 +33,8 @@ class _FoodPriceFilterState extends State<_FoodPriceFilter> {
       widget.minimum.clamp(0, 100000),
       widget.maximum.clamp(widget.minimum.clamp(0, 100000), 100000),
     );
-    lower = TextEditingController(text: '${range.start.toInt()}');
-    upper = TextEditingController(text: '${range.end.toInt()}');
+    lower = TextEditingController(text: amount(range.start));
+    upper = TextEditingController(text: amount(range.end));
   }
 
   @override
@@ -41,8 +45,7 @@ class _FoodPriceFilterState extends State<_FoodPriceFilter> {
   }
 
   void changed() {
-    final lo = int.tryParse(westernDigits(lower.text).replaceAll(',', '')),
-        hi = int.tryParse(westernDigits(upper.text).replaceAll(',', ''));
+    final lo = value(lower), hi = value(upper);
     if (lo != null && hi != null && lo >= 0 && hi >= lo && hi <= 100000)
       setState(() {
         range = RangeValues(lo.toDouble(), hi.toDouble());
@@ -50,87 +53,168 @@ class _FoodPriceFilterState extends State<_FoodPriceFilter> {
       });
   }
 
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-    title: Row(
-      children: [
-        const Icon(Icons.tune, color: scarlet),
-        const SizedBox(width: 8),
-        const Expanded(child: Text('تصفية الأسعار')),
-        IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.close),
+  Widget field(String label, TextEditingController controller) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(
+        label,
+        style: const TextStyle(fontSize: 17, color: Color(0xff555555)),
+      ),
+      const SizedBox(height: 6),
+      TextField(
+        controller: controller,
+        inputFormatters: const [EnglishDigitsFormatter()],
+        keyboardType: TextInputType.number,
+        textAlign: TextAlign.right,
+        onChanged: (_) => changed(),
+        style: const TextStyle(fontSize: 19),
+        decoration: InputDecoration(
+          suffixText: 'د.ع',
+          suffixStyle: const TextStyle(color: Color(0xffb7b7b7)),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(13),
+            borderSide: const BorderSide(color: Color(0xffe2e2e2)),
+          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(13)),
         ),
-      ],
-    ),
-    content: SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'حدد السعر المناسب إلك',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
-          ),
-          const SizedBox(height: 22),
-          for (final entry in [(lower, 'أقل سعر'), (upper, 'أعلى سعر')])
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: TextField(
-                controller: entry.$1,
-                keyboardType: TextInputType.number,
-                onChanged: (_) => changed(),
-                decoration: InputDecoration(
-                  labelText: entry.$2,
-                  suffixText: 'د.ع',
-                ),
-              ),
-            ),
-          RangeSlider(
-            values: range,
-            min: 0,
-            max: 100000,
-            divisions: 200,
-            activeColor: scarlet,
-            labels: RangeLabels(money(range.start), money(range.end)),
-            onChanged: (v) => setState(() {
-              range = v;
-              lower.text = '${v.start.toInt()}';
-              upper.text = '${v.end.toInt()}';
-              error = null;
-            }),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [Text(money(0)), Text(money(100000))],
-          ),
-          if (error != null)
-            Text(error!, style: const TextStyle(color: Colors.red)),
-        ],
-      ),
-    ),
-    actions: [
-      OutlinedButton(
-        onPressed: () => Navigator.pop(context),
-        child: const Text('رجوع'),
-      ),
-      FilledButton(
-        onPressed: () {
-          changed();
-          final lo = int.tryParse(
-                westernDigits(lower.text).replaceAll(',', ''),
-              ),
-              hi = int.tryParse(westernDigits(upper.text).replaceAll(',', ''));
-          if (lo == null || hi == null || lo < 0 || hi < lo || hi > 100000) {
-            setState(() => error = 'أدخل نطاقًا صحيحًا بين 0 و100,000');
-            return;
-          }
-          Navigator.pop(context, RangeValues(lo.toDouble(), hi.toDouble()));
-        },
-        child: const Text('تطبيق'),
       ),
     ],
+  );
+  void apply() {
+    changed();
+    final lo = value(lower), hi = value(upper);
+    if (lo == null || hi == null || lo < 0 || hi < lo || hi > 100000) {
+      setState(() => error = 'أدخل نطاقًا صحيحًا بين 0 و100,000');
+      return;
+    }
+    Navigator.pop(context, RangeValues(lo.toDouble(), hi.toDouble()));
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+    backgroundColor: Colors.white,
+    insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.tune, color: scarlet, size: 28),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text('تصفية الأسعار', style: heading(22))),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close, color: Colors.grey, size: 28),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 40,
+                    ),
+                  ),
+                ],
+              ),
+              const Text(
+                'حدد السعر المناسب إلك',
+                style: TextStyle(color: Colors.grey, fontSize: 15),
+              ),
+              const SizedBox(height: 28),
+              field('أقل سعر', lower),
+              const SizedBox(height: 24),
+              field('أعلى سعر', upper),
+              const SizedBox(height: 18),
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 5,
+                    rangeThumbShape: const RoundRangeSliderThumbShape(
+                      enabledThumbRadius: 11,
+                    ),
+                    overlayShape: SliderComponentShape.noOverlay,
+                  ),
+                  child: RangeSlider(
+                    values: range,
+                    min: 0,
+                    max: 100000,
+                    divisions: 200,
+                    activeColor: scarlet,
+                    inactiveColor: const Color(0xffffe0e3),
+                    onChanged: (v) => setState(() {
+                      range = v;
+                      lower.text = amount(v.start);
+                      upper.text = amount(v.end);
+                      error = null;
+                    }),
+                  ),
+                ),
+              ),
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '0 د.ع',
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                    Text(
+                      '100,000 د.ع',
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              if (error != null)
+                Text(error!, style: const TextStyle(color: scarlet)),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: apply,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 54),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                      ),
+                      child: const Text(
+                        'تطبيق',
+                        style: TextStyle(fontSize: 21),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 54),
+                        side: const BorderSide(color: scarlet, width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                      ),
+                      child: const Text('رجوع', style: TextStyle(fontSize: 21)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
   );
 }

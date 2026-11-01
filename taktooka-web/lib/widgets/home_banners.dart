@@ -1,3 +1,8 @@
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:taktooka/services/food_catalog_cache.dart';
+import 'package:taktooka/widgets/persistent_media_image.dart';
 import 'package:taktooka/services/media_url.dart';
 import 'package:taktooka/services/refresh_gate.dart';
 
@@ -16,13 +21,33 @@ class HomeBanners extends StatefulWidget {
 }
 
 class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
-  List<Json> _rows = [];
+  static List<Json> savedRows = [];
+  static DateTime? lastChecked;
+  List<Json> _rows = List<Json>.from(savedRows);
+  late final FoodCatalogCache cache;
+  void changed() {
+    lastChecked = null;
+    unawaited(_load());
+  }
+
+  Future<void> seed() async {
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(
+        'home-banners-v2',
+      );
+      if (raw != null && mounted && _rows.isEmpty)
+        setState(() => _rows = Backend.rows(jsonDecode(raw)));
+    } catch (_) {}
+  }
+
   Timer? _refresh;
   bool _loading = false, _foreground = true;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    cache = FoodCatalogCache.forBackend(widget.backend)..addListener(changed);
+    unawaited(seed());
     unawaited(_load());
     _refresh = Timer.periodic(const Duration(seconds: 30), (_) {
       if (_foreground && TickerMode.valuesOf(context).enabled)
@@ -31,7 +56,10 @@ class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
   }
 
   Future<void> _load() async {
-    if (_loading) return;
+    if (_loading ||
+        lastChecked != null &&
+            DateTime.now().difference(lastChecked!).inSeconds < 60)
+      return;
     _loading = true;
     try {
       final rows = await widget.backend.db
@@ -44,6 +72,22 @@ class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
           .limit(100)
           .timeout(const Duration(seconds: 10));
       final next = rows.map(Json.from).toList();
+      lastChecked = DateTime.now();
+      final paths = next.map((r) => r['image_path']).toSet();
+      for (final old in savedRows) {
+        if (!paths.contains(old['image_path']) && old['image_path'] is String)
+          unawaited(
+            FoodMediaCache.shared.remove(
+              mediaUrl(supabaseUrl, 'taktooka-banners', old['image_path']),
+            ),
+          );
+      }
+      savedRows = next;
+      unawaited(
+        SharedPreferences.getInstance().then(
+          (prefs) => prefs.setString('home-banners-v2', jsonEncode(next)),
+        ),
+      );
       if (mounted && !sameSnapshot(_rows, next)) setState(() => _rows = next);
     } catch (_) {
     } finally {
@@ -59,6 +103,7 @@ class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    cache.removeListener(changed);
     _refresh?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -147,7 +192,7 @@ class _BannerCarouselState extends State<BannerCarousel>
     super.dispose();
   }
 
-  Widget _image(Json row) => Image.network(
+  Widget _image(Json row) => PersistentMediaImage(
     mediaUrl(supabaseUrl, 'taktooka-banners', row['image_path']),
     key: ValueKey<String>(row['image_path'] as String),
     webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
@@ -184,7 +229,7 @@ class _BannerCarouselState extends State<BannerCarousel>
         _prefetchedPath = next;
         unawaited(
           precacheImage(
-            NetworkImage(
+            PersistentMediaProvider(
               '$supabaseUrl/storage/v1/object/public/taktooka-banners/$next',
             ),
             context,

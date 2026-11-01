@@ -1,3 +1,4 @@
+import 'package:taktooka/services/restaurant_availability.dart';
 import 'package:flutter/material.dart';
 import 'package:taktooka/core/design.dart';
 import 'package:taktooka/services/backend.dart';
@@ -68,7 +69,7 @@ class _MealDetailsPageState extends State<MealDetailsPage> {
       basePrice +
       extras.fold<int>(0, (s, a) => s + (a['price'] as num).toInt());
   bool get available =>
-      widget.meal['available'] != false && widget.restaurant['open'] != false;
+      widget.meal['available'] != false && restaurantIsOpen(widget.restaurant);
   Future<void> toggle() async {
     if (savingFavorite) return;
     setState(() => savingFavorite = true);

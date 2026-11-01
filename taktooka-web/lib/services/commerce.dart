@@ -1,3 +1,5 @@
+import 'food_catalog_cache.dart';
+
 import 'dart:async';
 
 import 'upload_image.dart';
@@ -10,21 +12,71 @@ import 'package:uuid/uuid.dart';
 
 import 'backend.dart';
 
+bool? _storefrontAvailable;
+
 Future<dynamic> commerceRpc(Backend b, String action, [Json data = const {}]) {
-  Future<dynamic> request() => b.db
-      .rpc(
-        const {
-              'me',
-              'orders',
-              'order_details',
-              'order_update',
-              'offer_decline',
-            }.contains(action)
-            ? 'tkt_food_commerce'
-            : 'tkt_commerce',
-        params: {'p_action': action, 'p_data': data},
-      )
-      .timeout(const Duration(seconds: 15));
+  Future<dynamic> legacy() async {
+    const dispatchActions = {
+      'me',
+      'orders',
+      'order_details',
+      'order_update',
+      'offer_decline',
+    };
+    Future<dynamic> call(String op, Json payload) => b.db
+        .rpc(
+          dispatchActions.contains(op) ? 'tkt_food_commerce' : 'tkt_commerce',
+          params: {'p_action': op, 'p_data': payload},
+        )
+        .timeout(const Duration(seconds: 15));
+    if (action == 'support_context') {
+      final me = Json.from(await call('me', {}) as Map);
+      return {
+        'name': b.profile?['name'],
+        'phone': b.profile?['phone'],
+        'role': me['restaurant'] is Map
+            ? 'صاحب مطعم'
+            : me['self_courier'] is Map
+            ? 'مندوب خاص'
+            : b.captain
+            ? 'كابتن'
+            : 'زبون',
+        'orders': await call('orders', {}),
+      };
+    }
+    return call(action, data);
+  }
+
+  Future<dynamic> request() async {
+    if (_storefrontAvailable != false) {
+      try {
+        final value = await b.db
+            .rpc(
+              'tkt_food_storefront',
+              params: {'p_action': action, 'p_data': data},
+            )
+            .timeout(const Duration(seconds: 15));
+        _storefrontAvailable = true;
+        FoodCatalogCache.forBackend(b).enableLiveUpdates();
+        return value;
+      } on PostgrestException catch (e) {
+        if (e.code != 'PGRST202' && e.code != '42883') rethrow;
+        _storefrontAvailable = false;
+      }
+    }
+    return legacy();
+  }
+
+  final cache = FoodCatalogCache.forBackend(b);
+  if (const {
+    'menu',
+    'restaurants',
+    'catalog',
+    'categories',
+    'category_options',
+  }.contains(action)) {
+    return cache.read(action, data, () => retryNetworkRead(request));
+  }
   const reads = {
     'me',
     'orders',
@@ -40,7 +92,14 @@ Future<dynamic> commerceRpc(Backend b, String action, [Json data = const {}]) {
     'favorites',
     'category_options',
   };
-  return reads.contains(action) ? retryNetworkRead(request) : request();
+  if (reads.contains(action) ||
+      action == 'support_context' ||
+      action == 'restaurant_status')
+    return retryNetworkRead(request);
+  return request().then((value) {
+    cache.invalidate();
+    return value;
+  });
 }
 
 String commerceError(Object e) {

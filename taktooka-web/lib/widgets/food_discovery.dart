@@ -1,4 +1,5 @@
 import 'food_price_filter.dart';
+
 import 'dart:async';
 
 import 'favorite_restaurants.dart';
@@ -484,164 +485,237 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
         ? <Json>[]
         : widget.restaurants
               .where(
-                (r) => normalize(
-                  '${r['name']} ${r['description'] ?? ''}',
-                ).contains(normalize(query.trim())),
+                (r) =>
+                    normalize('${r['name']} ${r['description'] ?? ''}')
+                        .contains(normalize(query.trim())),
               )
               .toList();
+    if (priceRange != null)
+      visibleShops.removeWhere(
+        (r) => !visibleMeals.any((m) => m['restaurant_id'] == r['id']),
+      );
     final count = visibleMeals.length + visibleShops.length;
+    Widget resultCard(Json item, {bool restaurant = false}) => Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: const Color(0xffececec)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x07000000),
+            blurRadius: 14,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(17),
+        onTap: () =>
+            restaurant ? widget.openRestaurant?.call(item) : widget.open(item),
+        child: Padding(
+          padding: const EdgeInsets.all(7),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: SizedBox(
+                  width: MediaQuery.sizeOf(context).width < 350 ? 90 : 116,
+                  height: 100,
+                  child: widget.photo(item['image_path'], height: 100),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item['name'] ?? '',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: heading(21),
+                    ),
+                    Text(
+                      restaurant ? 'مطعم' : item['restaurant_name'] ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xff999999),
+                        fontSize: 16,
+                      ),
+                    ),
+                    if (!restaurant) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        money(item['price']),
+                        style: const TextStyle(
+                          color: scarlet,
+                          fontSize: 23,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: IconButton.filledTonal(
+                  tooltip: restaurant ? 'فتح المطعم' : 'إضافة الوجبة',
+                  onPressed: () => restaurant
+                      ? widget.openRestaurant?.call(item)
+                      : widget.open(item),
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xffffe9ed),
+                  ),
+                  icon: Icon(
+                    restaurant ? Icons.chevron_left : Icons.add,
+                    color: scarlet,
+                    size: 30,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
     return Scaffold(
-      appBar: AppBar(title: const Text('البحث عن الطعام')),
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        centerTitle: true,
+        title: Text('البحث عن الطعام', style: heading(25)),
+      ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    autofocus: true,
-                    onChanged: fetch,
-                    decoration: InputDecoration(
-                      hintText: 'ابحث عن وجبة أو مطعم',
-                      prefixIcon: const Icon(Icons.search),
-                      filled: true,
-                      fillColor: const Color(0xfff5f5f7),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
+                  child: SizedBox(
+                    height: 52,
+                    child: TextField(
+                      autofocus: false,
+                      onChanged: fetch,
+                      style: const TextStyle(fontSize: 18),
+                      decoration: InputDecoration(
+                        hintText: 'ابحث عن وجبة أو مطعم',
+                        hintStyle: const TextStyle(
+                          color: Color(0xff85858b),
+                          fontSize: 18,
+                        ),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          size: 28,
+                          color: Color(0xff5c5c63),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xfff7f7f9),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(13),
+                          borderSide: const BorderSide(
+                            color: Color(0xffebebef),
+                          ),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(13),
+                        ),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton.outlined(
-                  tooltip: 'تصفية الأسعار',
-                  color: scarlet,
-                  onPressed: () async {
-                    final result = await showFoodPriceFilter(
-                      context,
-                      minimum: priceRange?.start ?? 0,
-                      maximum: priceRange?.end ?? 100000,
-                    );
-                    if (result != null && mounted)
-                      setState(() => priceRange = result);
-                  },
-                  icon: const Icon(Icons.tune),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: IconButton.outlined(
+                    tooltip: 'تصفية الأسعار',
+                    style: IconButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      side: const BorderSide(color: scarlet, width: 1.5),
+                    ),
+                    color: scarlet,
+                    onPressed: () async {
+                      final result = await showFoodPriceFilter(
+                        context,
+                        minimum: priceRange?.start ?? 0,
+                        maximum: priceRange?.end ?? 100000,
+                      );
+                      if (result != null && mounted)
+                        setState(() => priceRange = result);
+                    },
+                    icon: const Icon(Icons.tune, size: 27),
+                  ),
                 ),
               ],
             ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Wrap(
-              spacing: 8,
+            child: Row(
               children: [
                 for (final label in ['الكل', 'وجبات', 'مطاعم'])
-                  ChoiceChip(
-                    label: Text(label),
-                    selected: mode == label,
-                    selectedColor: scarlet,
-                    labelStyle: TextStyle(
-                      color: mode == label ? Colors.white : Colors.black,
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 8),
+                    child: ChoiceChip(
+                      showCheckmark: false,
+                      label: Text(label),
+                      selected: mode == label,
+                      selectedColor: scarlet,
+                      backgroundColor: const Color(0xfff7f7f9),
+                      side: BorderSide.none,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(19),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      labelStyle: TextStyle(
+                        fontSize: 17,
+                        color: mode == label ? Colors.white : Colors.black,
+                      ),
+                      onSelected: (_) => setState(() => mode = label),
                     ),
-                    onSelected: (_) => setState(() => mode = label),
                   ),
               ],
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 22, 16, 16),
             child: Row(
               children: [
                 Expanded(child: Text('نتائج البحث', style: heading(24))),
                 Text(
                   '$count نتائج',
-                  style: const TextStyle(color: Colors.grey),
+                  style: const TextStyle(color: Colors.grey, fontSize: 16),
                 ),
               ],
             ),
           ),
-          if (loading) const LinearProgressIndicator(),
+          if (loading) const LinearProgressIndicator(minHeight: 2),
           if (error != null)
             TextButton(onPressed: () => fetch(query), child: Text(error!)),
           Expanded(
             child: count == 0
                 ? const Center(child: Text('ماكو وجبات مطابقة للبحث'))
                 : ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
                       for (final shop in visibleShops)
-                        Card(
-                          child: ListTile(
-                            leading: SizedBox(
-                              width: 72,
-                              child: widget.photo(
-                                shop['image_path'],
-                                height: 72,
-                              ),
-                            ),
-                            title: Text(shop['name'] ?? '', style: heading(18)),
-                            subtitle: const Text('مطعم'),
-                            trailing: const Icon(Icons.chevron_left),
-                            onTap: widget.openRestaurant == null
-                                ? null
-                                : () => widget.openRestaurant!(shop),
-                          ),
-                        ),
-                      for (final item in visibleMeals)
-                        Card(
-                          child: InkWell(
-                            onTap: () => widget.open(item),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: 94,
-                                    child: widget.photo(
-                                      item['image_path'],
-                                      height: 96,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item['name'] ?? '',
-                                          style: heading(19),
-                                        ),
-                                        Text(
-                                          item['restaurant_name'] ?? '',
-                                          style: const TextStyle(
-                                            color: Colors.grey,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          money(item['price']),
-                                          style: const TextStyle(
-                                            color: scarlet,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 21,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton.filledTonal(
-                                    tooltip: 'إضافة الوجبة',
-                                    onPressed: () => widget.open(item),
-                                    icon: const Icon(Icons.add, color: scarlet),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+                        resultCard(shop, restaurant: true),
+                      for (final item in visibleMeals) resultCard(item),
                     ],
                   ),
           ),

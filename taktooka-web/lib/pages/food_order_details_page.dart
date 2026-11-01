@@ -1,6 +1,11 @@
+import 'package:taktooka/services/food_contact.dart';
+import 'package:taktooka/widgets/persistent_media_image.dart';
+
 import 'dart:async';
+
 import 'package:taktooka/services/media_url.dart';
 import 'package:taktooka/widgets/food_order_item.dart';
+
 import 'chat_page.dart';
 
 import 'package:flutter/material.dart';
@@ -47,9 +52,8 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
   int get secondsLeft {
     final expires =
         DateTime.tryParse('${order['courier_offer_expires_at'] ?? ''}') ??
-        DateTime.tryParse(
-          '${order['updated_at'] ?? ''}',
-        )?.add(const Duration(minutes: 2));
+        DateTime.tryParse('${order['updated_at'] ?? ''}')
+            ?.add(const Duration(minutes: 2));
     return expires == null
         ? 0
         : expires.difference(widget.b.serverNow).inSeconds.clamp(0, 120);
@@ -115,7 +119,7 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
 
   Widget photo(dynamic path, {double height = 80}) => ClipRRect(
     borderRadius: BorderRadius.circular(12),
-    child: Image.network(
+    child: PersistentMediaImage(
       mediaUrl(supabaseUrl, 'restaurant-images', '${path ?? ''}'),
       height: height,
       width: height,
@@ -198,6 +202,15 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
                   onPressed: () => call(phone),
                   icon: const Icon(Icons.call_outlined),
                   label: const Text('اتصال'),
+                ),
+              if (phone != null)
+                OutlinedButton.icon(
+                  onPressed: () => openFoodWhatsApp(phone, order: order),
+                  icon: const Icon(
+                    Icons.chat_outlined,
+                    color: Color(0xff128c7e),
+                  ),
+                  label: const Text('واتساب'),
                 ),
               if (location != null)
                 OutlinedButton.icon(
@@ -326,9 +339,7 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                  Text(
-                    'رقم الطلب: #${order['id'].toString().split('-').first.toUpperCase()}',
-                  ),
+                  Text('رقم الطلب: #${foodOrderNumber(order)}'),
                   const SizedBox(height: 8),
                   if (isCourier || widget.b.restaurantOwner)
                     Text(
@@ -513,7 +524,7 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
                 MaterialPageRoute(
                   builder: (_) => Scaffold(
                     appBar: AppBar(title: const Text('دعم تكتوكة')),
-                    body: ChatPage(b: widget.b),
+                    body: ChatPage(b: widget.b, orderId: order['id']),
                   ),
                 ),
               ),

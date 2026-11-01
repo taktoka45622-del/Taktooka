@@ -1,7 +1,7 @@
 name: taktooka
 description: تطبيق تكتوكة للمستخدم والكابتن
 publish_to: none
-version: 1.7.10+166
+version: 1.7.11+167
 environment:
   sdk: '>=3.10.0 <4.0.0'
   flutter: '>=3.41.0'
