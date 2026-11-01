@@ -1,3 +1,4 @@
+import 'package:taktooka/core/design.dart' show money;
 import 'package:taktooka/services/food_contact.dart';
 
 import 'dart:async';
