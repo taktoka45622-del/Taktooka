@@ -1,3 +1,5 @@
+import 'package:taktooka/services/restaurant_range.dart';
+import 'package:taktooka/services/media_url.dart';
 import 'package:flutter/material.dart';
 import 'package:taktooka/core/design.dart';
 import 'package:taktooka/services/backend.dart';
@@ -6,11 +8,13 @@ import 'package:taktooka/services/restaurant_favorites.dart';
 class FavoriteRestaurants extends StatelessWidget {
   final List<Json> restaurants;
   final ValueChanged<Json> open;
+  final ValueChanged<Json>? toggle;
   final Widget Function(dynamic, {double height}) photo;
   const FavoriteRestaurants({
     super.key,
     required this.restaurants,
     required this.open,
+    this.toggle,
     required this.photo,
   });
   @override
@@ -20,7 +24,40 @@ class FavoriteRestaurants extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 18),
-            Text('المطاعم المفضلة', style: heading(22)),
+            Row(
+              children: [
+                Expanded(child: Text('المطاعم المفضلة', style: heading(22))),
+                TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(title: const Text('المطاعم المفضلة')),
+                        body: ListView(
+                          children: [
+                            for (final r in restaurants)
+                              ListTile(
+                                leading: SizedBox(
+                                  width: 58,
+                                  child: ClipOval(
+                                    child: photo(r['image_path'], height: 58),
+                                  ),
+                                ),
+                                title: Text(r['name'] ?? ''),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  open(r);
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  child: const Text('عرض الكل'),
+                ),
+              ],
+            ),
             const SizedBox(height: 14),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -37,20 +74,46 @@ class FavoriteRestaurants extends StatelessWidget {
                           onTap: () => open(r),
                           child: Column(
                             children: [
-                              Container(
-                                width: 82,
-                                height: 82,
-                                padding: const EdgeInsets.all(3),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: const Color(0xffffdce1),
-                                    width: 2,
+                              Stack(
+                                children: [
+                                  Container(
+                                    width: 82,
+                                    height: 82,
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: const Color(0xffffdce1),
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: ClipOval(
+                                      child: photo(r['image_path'], height: 72),
+                                    ),
                                   ),
-                                ),
-                                child: ClipOval(
-                                  child: photo(r['image_path'], height: 72),
-                                ),
+                                  Positioned(
+                                    bottom: 0,
+                                    left: 0,
+                                    child: Material(
+                                      color: Colors.white,
+                                      shape: const CircleBorder(),
+                                      child: InkWell(
+                                        customBorder: const CircleBorder(),
+                                        onTap: toggle == null
+                                            ? null
+                                            : () => toggle!(r),
+                                        child: const Padding(
+                                          padding: EdgeInsets.all(6),
+                                          child: Icon(
+                                            Icons.favorite,
+                                            size: 18,
+                                            color: scarlet,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 8),
                               Text(
@@ -124,15 +187,29 @@ class _HomeFavoriteRestaurantsState extends State<HomeFavoriteRestaurants> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       FavoriteRestaurants(
-        restaurants: store.restaurants,
+        toggle: (r) async {
+          try {
+            await store.toggle(r);
+          } catch (_) {
+            if (mounted) setState(() => error = 'تعذر تحديث المفضلة');
+          }
+        },
+        restaurants: store.restaurants.where((r) {
+          final p = widget.b.knownPosition;
+          return restaurantWithinRange(
+            r,
+            p == null ? null : [p.latitude, p.longitude],
+          );
+        }).toList(),
         open: (r) async {
           await widget.open(r);
           await refresh();
         },
         photo: (path, {double height = 80}) => Image.network(
-          widget.b.db.storage.from('restaurant-images').getPublicUrl('$path'),
+          mediaUrl(supabaseUrl, 'restaurant-images', '$path'),
           height: height,
           width: height,
+          webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => SizedBox(
             height: height,

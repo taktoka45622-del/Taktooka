@@ -1,7 +1,7 @@
 name: taktooka
 description: تطبيق تكتوكة للمستخدم والكابتن
 publish_to: none
-version: 1.7.5+161
+version: 1.7.6+162
 environment:
   sdk: '>=3.10.0 <4.0.0'
   flutter: '>=3.41.0'
@@ -49,6 +49,8 @@ flutter:
     - assets/onboarding/
     - assets/mapbox-logo.png
     - assets/map_tuktuk_3d.png
+    - assets/routing/
+    - assets/search/
 
   fonts:
     - family: Cairo

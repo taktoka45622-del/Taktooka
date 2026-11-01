@@ -1,4 +1,6 @@
+import 'package:taktooka/services/media_url.dart';
 import 'package:taktooka/services/refresh_gate.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -34,7 +36,7 @@ class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
     try {
       final rows = await widget.backend.db
           .from('tkt_home_banners')
-          .select('id,slot,image_path,title,sort_order,created_at')
+          .select()
           .eq('enabled', true)
           .order('sort_order')
           .order('created_at')
@@ -68,12 +70,14 @@ class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
 
 class BannerCarousel extends StatefulWidget {
   final List<Json> images;
+  final ValueChanged<Json>? onTap;
   final Widget fallback;
   final double aspectRatio;
   final BorderRadius borderRadius;
   const BannerCarousel({
     super.key,
     required this.images,
+    this.onTap,
     required this.fallback,
     this.aspectRatio = 2.19,
     this.borderRadius = const BorderRadius.all(Radius.circular(16)),
@@ -144,8 +148,9 @@ class _BannerCarouselState extends State<BannerCarousel>
   }
 
   Widget _image(Json row) => Image.network(
-    '$supabaseUrl/storage/v1/object/public/taktooka-banners/${row['image_path']}',
+    mediaUrl(supabaseUrl, 'taktooka-banners', row['image_path']),
     key: ValueKey<String>(row['image_path'] as String),
+    webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
     fit: BoxFit.cover,
     cacheWidth: 1080,
     semanticLabel: (row['title'] as String?)?.isNotEmpty == true
@@ -201,7 +206,12 @@ class _BannerCarouselState extends State<BannerCarousel>
                   : const Duration(milliseconds: 300),
               child: SizedBox.expand(
                 key: ValueKey<String>(images[current]['image_path'] as String),
-                child: _image(images[current]),
+                child: GestureDetector(
+                  onTap: widget.onTap == null
+                      ? null
+                      : () => widget.onTap!(images[current]),
+                  child: _image(images[current]),
+                ),
               ),
             ),
             if (images.length > 1)

@@ -1,3 +1,4 @@
+import 'package:taktooka/services/media_url.dart';
 import 'package:flutter/material.dart';
 import 'package:taktooka/core/commerce_theme.dart';
 import 'package:taktooka/services/backend.dart';
@@ -168,9 +169,7 @@ class _RestaurantSettingsPageState extends State<RestaurantSettingsPage> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: Image.network(
-                      widget.b.db.storage
-                          .from('restaurant-images')
-                          .getPublicUrl(image),
+                      mediaUrl(supabaseUrl, 'restaurant-images', image),
                       height: 130,
                       width: double.infinity,
                       fit: BoxFit.cover,

@@ -1,3 +1,4 @@
+import 'package:taktooka/services/media_url.dart';
 import 'package:taktooka/widgets/food_order_item.dart';
 import 'chat_page.dart';
 
@@ -58,9 +59,7 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
   Widget photo(dynamic path, {double height = 80}) => ClipRRect(
     borderRadius: BorderRadius.circular(12),
     child: Image.network(
-      widget.b.db.storage
-          .from('restaurant-images')
-          .getPublicUrl('${path ?? ''}'),
+      mediaUrl(supabaseUrl, 'restaurant-images', '${path ?? ''}'),
       height: height,
       width: height,
       fit: BoxFit.cover,

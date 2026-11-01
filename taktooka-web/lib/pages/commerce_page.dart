@@ -1,6 +1,9 @@
+import 'package:taktooka/services/restaurant_range.dart';
+import 'package:taktooka/services/media_url.dart';
 import 'package:taktooka/models/food_cart.dart';
 import 'package:taktooka/services/restaurant_favorites.dart';
 import 'package:taktooka/widgets/food_order_item.dart';
+
 import 'meal_details_page.dart';
 import 'food_checkout_page.dart';
 
@@ -86,7 +89,16 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     me = Json.from(b.commerce);
-    selected = widget.initialRestaurant;
+    final point = b.knownPosition;
+    selected =
+        widget.initialRestaurant != null &&
+            point != null &&
+            restaurantWithinRange(widget.initialRestaurant!, [
+              point.latitude,
+              point.longitude,
+            ])
+        ? widget.initialRestaurant
+        : null;
     favorites = favoritesFor(b)..addListener(_favoritesChanged);
     if (!b.captain &&
         b.commerce['restaurant'] == null &&
@@ -206,12 +218,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
             'category': cuisine,
             'min_price': minFoodPrice,
             'max_price': maxFoodPrice,
-            'offers':
-                offersOnly ||
-                (foodSearch.isEmpty &&
-                    cuisine.isEmpty &&
-                    minFoodPrice == 0 &&
-                    maxFoodPrice == 1000000),
+            'offers': offersOnly,
           }),
         );
       }
@@ -361,9 +368,13 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                         child: InteractiveViewer(
                           child: Center(
                             child: Image.network(
-                              b.db.storage
-                                  .from('restaurant-images')
-                                  .getPublicUrl(paths[index]),
+                              mediaUrl(
+                                supabaseUrl,
+                                'restaurant-images',
+                                paths[index],
+                              ),
+                              webHtmlElementStrategy:
+                                  WebHtmlElementStrategy.fallback,
                               fit: BoxFit.contain,
                               errorBuilder: (_, __, ___) => const Text(
                                 'تعذر تحميل الصورة؛ أعد فتح المعرض',
@@ -401,9 +412,10 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: Image.network(
-        b.db.storage.from('restaurant-images').getPublicUrl(path),
+        mediaUrl(supabaseUrl, 'restaurant-images', path),
         height: height,
         width: double.infinity,
+        webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
         fit: BoxFit.cover,
         cacheWidth: height <= 100 ? 300 : 1000,
         errorBuilder: (_, __, ___) =>
@@ -660,6 +672,14 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   }
 
   Future<void> openShop(Json shop) async {
+    if (!owner && !restaurantWithinRange(shop, _restaurantArea)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('المطعم خارج نطاق التوصيل 15 كم؛ حدد موقع التوصيل'),
+        ),
+      );
+      return;
+    }
     await run(() async {
       menu = Backend.rows(
         await commerceRpc(b, 'menu', {'restaurant_id': shop['id']}),
@@ -1809,7 +1829,24 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                               )
                               .toList(),
                           meals: catalog,
-                          favorites: favorites.restaurants,
+                          findMeals: (query) async => _restaurantArea == null
+                              ? []
+                              : Backend.rows(
+                                  await commerceRpc(b, 'catalog', {
+                                    'location': _restaurantArea,
+                                    'search': query,
+                                    'category': '',
+                                    'offers': false,
+                                    'min_price': 0,
+                                    'max_price': 1000000,
+                                  }),
+                                ),
+                          favorites: favorites.restaurants
+                              .where(
+                                (r) =>
+                                    restaurantWithinRange(r, _restaurantArea),
+                              )
+                              .toList(),
                           isFavorite: (r) => favorites.contains(r['id']),
                           toggleFavorite: (r) => run(() async {
                             await favorites.toggle(r);
@@ -1867,6 +1904,31 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                           banner: HomeBanners(
                             backend: b,
                             builder: (c, rows) => BannerCarousel(
+                              onTap: (row) async {
+                                final restaurantId = row['restaurant_id'];
+                                final mealId = row['meal_id'];
+                                final matches = shops.where(
+                                  (r) => r['id'] == restaurantId,
+                                );
+                                if (matches.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'هذا المطعم غير متاح بموقعك الحالي',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                await openShop(matches.first);
+                                if (mealId != null) {
+                                  final found = menu.where(
+                                    (m) => m['id'] == mealId,
+                                  );
+                                  if (found.isNotEmpty)
+                                    await openMeal(found.first);
+                                }
+                              },
                               images: rows
                                   .where((r) => r['slot'] == 3)
                                   .toList(),

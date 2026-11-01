@@ -552,10 +552,16 @@ function renderBanners(){
  }
 }
 async function saveBanner(id,fields){const {error}=await db.from('tkt_home_banners').update(fields).eq('id',id).select('id').single();if(error)throw error;}
-function editBanner(row){
+async function editBanner(row){
  const body=openDetail('تعديل صورة البنر'),title=inputField('عنوان الصورة',row.title),order=inputField('الترتيب — الرقم الأصغر أولاً',row.sort_order,'number');title.input.maxLength=120;order.input.min=0;order.input.max=10000;
- const label=text('label','مكان الصورة'),slot=document.createElement('select');for(const [value,name]of [[1,'بنر 1 — فوك'],[2,'بنر 2 — جوه']]){const option=text('option',name);option.value=value;slot.append(option)}slot.value=row.slot;label.append(slot);
- body.append(title.box,label,order.box,button('حفظ التعديل',async()=>{const n=Number(order.input.value);if(!Number.isInteger(n)||n<0||n>10000)throw new Error('الترتيب رقم من 0 إلى 10000');await saveBanner(row.id,{title:title.input.value.trim(),slot:Number(slot.value),sort_order:n});closeDetail();await loadBanners();status('تم حفظ صورة البنر')}));
+ const label=text('label','مكان الصورة'),slot=document.createElement('select');for(const [value,name]of [[1,'بنر 1 — فوك'],[2,'بنر 2 — جوه'],[3,'بنر الطعام']]){const option=text('option',name);option.value=value;slot.append(option)}slot.value=row.slot;label.append(slot);
+ const shopLabel=text('label','يفتح المطعم'),shop=document.createElement('select'),mealLabel=text('label','أو يفتح الوجبة'),meal=document.createElement('select');shopLabel.append(shop);mealLabel.append(meal);
+ body.append(title.box,label,order.box,shopLabel,mealLabel);
+ const {data,error}=await db.rpc('tkt_banner_targets');if(error){body.append(text('p','تعذر تحميل المطاعم؛ أغلق النافذة وأعد المحاولة'));return;}
+ function fill(select,rows,empty){select.replaceChildren();const blank=text('option',empty);blank.value='';select.append(blank);for(const r of rows){const o=text('option',r.name);o.value=r.id;select.append(o);}}
+ fill(shop,data.restaurants,'بدون ربط');shop.value=row.restaurant_id||'';
+ const fillMeals=()=>{fill(meal,data.meals.filter(m=>m.restaurant_id===shop.value),'فتح المطعم فقط');meal.disabled=!shop.value;};fillMeals();meal.value=row.meal_id||'';shop.onchange=fillMeals;
+ body.append(button('حفظ التعديل',async()=>{const n=Number(order.input.value);if(!Number.isInteger(n)||n<0||n>10000)throw new Error('الترتيب رقم من 0 إلى 10000');await saveBanner(row.id,{title:title.input.value.trim(),slot:Number(slot.value),sort_order:n,restaurant_id:shop.value||null,meal_id:meal.value||null});closeDetail();await loadBanners();status('تم حفظ صورة البنر وربطها')}));
 }
 async function bannerJpeg(file){
  if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>5242880)throw new Error('اختَر JPG أو PNG أو WebP بحجم لا يتجاوز 5 ميغابايت');
