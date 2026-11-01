@@ -1,3 +1,4 @@
+import 'package:taktooka/services/commerce.dart';
 import 'package:taktooka/widgets/food_discovery.dart';
 import 'package:taktooka/pages/meal_details_page.dart';
 import 'package:taktooka/widgets/favorite_restaurants.dart';
@@ -300,6 +301,11 @@ void main() {
     );
     expect(snapshot, isA<Map>());
     expect(snapshot['restaurant'], isNotNull);
+    final compatibility = PreviewBackend();
+    final supported = await commerceRpc(compatibility, 'me').timeout(const Duration(seconds: 3));
+    expect(supported, isA<Map>());
+    expect(supported['restaurant'], isNotNull);
+    compatibility.dispose();
     for (final f in [
       ('Cairo', 'assets/fonts/Cairo.ttf'),
       ('MaterialIcons', 'fonts/MaterialIcons-Regular.otf'),
