@@ -1017,6 +1017,10 @@ void main() {
         await open(tester, FoodPage(b: b), const Size(390, 844), 1);
         final restaurant = find.text(shop['name'] as String).last;
         await tester.ensureVisible(restaurant);
+        final controller = tester
+            .widget<CustomScrollView>(find.byType(CustomScrollView).first)
+            .controller!;
+        final listOffset = controller.offset;
         await tester.tap(restaurant);
         await settleData();
         expect(find.text('كل المطاعم'), findsOneWidget);
@@ -1025,6 +1029,9 @@ void main() {
         expect(find.byType(FoodPage), findsOneWidget);
         expect(find.text('شنو مشتهي اليوم؟'), findsOneWidget);
         expect(find.text('كل المطاعم'), findsNothing);
+        expect(controller.offset, closeTo(listOffset, 1));
+        controller.jumpTo(0);
+        await tester.pump();
         await tester.ensureVisible(find.text('طلباتي').first);
         await tester.tap(find.text('طلباتي').first);
         await settleData();
