@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/food_discovery.dart';
 import 'package:taktooka/pages/meal_details_page.dart';
 import 'package:taktooka/widgets/favorite_restaurants.dart';
 import 'package:image/image.dart' as raster;
@@ -1061,7 +1062,11 @@ void main() {
         await settleData();
         expect(find.text('البحث عن الطعام'), findsOneWidget);
         expect(find.text('بركر'), findsOneWidget);
-        await tester.tap(find.byType(BackButton).first);
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump();
+        final searchBack = find.descendant(of: find.byType(FoodSearchPage), matching: find.byType(BackButton)).hitTestable();
+        expect(searchBack, findsOneWidget);
+        await tester.tap(searchBack);
         await settleData();
         expect(find.text('شنو مشتهي اليوم؟'), findsOneWidget);
         expect(find.text('كل المطاعم'), findsNothing);
