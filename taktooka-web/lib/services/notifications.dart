@@ -186,6 +186,7 @@ Future<void> firebaseBackground(RemoteMessage message) async {
 }
 
 class NotificationCenter extends ChangeNotifier {
+  final Set<String> surfacedFood = {};
   final Backend backend;
   final void Function(Json) open;
   NotificationCenter(this.backend, this.open, {AudioPlayer? audioPlayer})
@@ -553,6 +554,10 @@ class NotificationCenter extends ChangeNotifier {
       unawaited(
         showDeviceNotice(n, ring: !isIncomingRequest(n) || !foreground),
       );
+      if (isFoodRequest(n) && n['request_type'] == 'courier' && foreground && !noticeExpired(n) && surfacedFood.add('${n['user_id']}:${n['offer_id']}')) {
+        if (surfacedFood.length > 200) surfacedFood.remove(surfacedFood.first);
+        scheduleMicrotask(() { if (!closed && foreground && !noticeExpired(n)) open(n); });
+      }
       if (isIncomingRequest(n)) {
         unawaited(backend.refresh());
         startRing(

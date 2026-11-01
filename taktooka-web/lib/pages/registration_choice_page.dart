@@ -32,12 +32,6 @@ class RegistrationChoicePage extends StatelessWidget {
               Icons.electric_rickshaw,
             ),
             (
-              'كابتن دراجة',
-              'وصّل الطلبات وزيد دخلك',
-              'bike',
-              Icons.delivery_dining,
-            ),
-            (
               'صاحب مطعم',
               'اعرض أكلاتك واستقبل الطلبات',
               'restaurant',

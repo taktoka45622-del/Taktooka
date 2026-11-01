@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/food_price_filter.dart';
 import 'package:taktooka/services/restaurant_range.dart';
 import 'package:taktooka/services/media_url.dart';
 import 'package:taktooka/models/food_cart.dart';
@@ -552,6 +553,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
         Row(
           children: [
             Expanded(child: Text('قائمة الطعام', style: heading(22))),
+            IconButton(tooltip: 'إضافة قسم', onPressed: busy ? null : addRestaurantCategory, icon: const Icon(Icons.playlist_add, color: scarlet)),
             FilledButton.icon(
               style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
               onPressed: busy ? null : () => editItem(),
@@ -911,44 +913,14 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     return result;
   }
 
-  Future<void> requestPublicCourier(Json order) async {
-    final vehicle = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.white,
-      showDragHandle: true,
-      builder: (sheet) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'اختَر المندوب العام',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.electric_rickshaw),
-              title: const Text('مندوب تكتك'),
-              onTap: () => Navigator.pop(sheet, 'tuktuk'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delivery_dining),
-              title: const Text('مندوب دراجة'),
-              onTap: () => Navigator.pop(sheet, 'bike'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (vehicle != null && mounted)
-      await change(
-        order,
-        'searching',
-        vehicle: vehicle,
-        deliveryMode: 'public',
-      );
+  Future<void> requestPublicCourier(Json order) => change(order, 'searching', vehicle: 'tuktuk', deliveryMode: 'public');
+
+  Future<void> addRestaurantCategory() async {
+    final value = await askText('إضافة قسم داخل المطعم');
+    if (value == null || value.trim().isEmpty) return;
+    await run(() async { await commerceRpc(b, 'category_save', {'name': value.trim()}); });
   }
+
 
   Future<bool> change(
     Json o,
@@ -1024,76 +996,11 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   }
 
   Future<void> filterFoodPrices() async {
-    final lower = TextEditingController(text: '$minFoodPrice'),
-        upper = TextEditingController(text: '$maxFoodPrice');
-    final form = GlobalKey<FormState>();
-    final applied = await showDialog<bool>(
-      context: context,
-      builder: (d) => AlertDialog(
-        title: const Text('تصفية أسعار الطعام'),
-        content: SingleChildScrollView(
-          child: Form(
-            key: form,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: lower,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'أقل سعر بالدينار',
-                  ),
-                  validator: (v) => int.tryParse(westernDigits(v ?? '')) == null
-                      ? 'أدخل سعرًا صحيحًا'
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: upper,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'أعلى سعر بالدينار',
-                  ),
-                  validator: (v) {
-                    final lo = int.tryParse(westernDigits(lower.text)),
-                        hi = int.tryParse(westernDigits(v ?? ''));
-                    return lo == null ||
-                            hi == null ||
-                            lo < 0 ||
-                            hi < lo ||
-                            hi > 1000000
-                        ? 'أدخل نطاقًا بين 0 و1,000,000'
-                        : null;
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(d),
-            child: const Text('رجوع'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (form.currentState!.validate()) Navigator.pop(d, true);
-            },
-            child: const Text('تطبيق'),
-          ),
-        ],
-      ),
-    );
-    if (applied == true && mounted) {
-      setState(() {
-        minFoodPrice = int.parse(westernDigits(lower.text));
-        maxFoodPrice = int.parse(westernDigits(upper.text));
-      });
-      _dataRevision++;
-      await load();
-    }
-    lower.dispose();
-    upper.dispose();
+    final result = await showFoodPriceFilter(context, minimum: minFoodPrice.toDouble(), maximum: maxFoodPrice.toDouble());
+    if (result == null || !mounted) return;
+    setState(() { minFoodPrice = result.start.toInt(); maxFoodPrice = result.end.toInt(); });
+    _dataRevision++;
+    await load();
   }
 
   Widget orderCard(Json o) {
@@ -1287,10 +1194,9 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                   children: [
                     FilledButton(
                       onPressed: busy ? null : () => requestPublicCourier(o),
-                      child: const Text('طلب مندوب عام'),
+                      child: const Text('كابتن تكتوكة'),
                     ),
-                    if (restaurant['self_delivery'] == true)
-                      OutlinedButton(
+                    OutlinedButton(
                         onPressed: busy
                             ? null
                             : () => change(
@@ -1298,14 +1204,18 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                                 'searching',
                                 deliveryMode: 'private',
                               ),
-                        child: const Text('طلب مندوب خاص'),
+                        child: const Text('كابتن خاص'),
                       ),
                   ],
                 ),
+              if (owner && status == 'searching')
+                OutlinedButton(onPressed: busy ? null : () => change(o, 'preparing'), child: const Text('إلغاء البحث عن كابتن')),
+              if (owner && ['preparing', 'searching'].contains(status))
+                TextButton(onPressed: busy ? null : () => change(o, 'rejected'), child: const Text('رفض الطلب — مع ذكر السبب')),
               if (courier && status == 'searching' && !mine)
                 FilledButton(
-                  onPressed: busy ? null : () => change(o, 'accepted'),
-                  child: const Text('قبول توصيل الطلب'),
+                  onPressed: busy ? null : () => openOrder(o),
+                  child: const Text('عرض الطلب والموافقة'),
                 ),
               if (mine && status == 'accepted')
                 FilledButton(
@@ -2085,6 +1995,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                           children: [
                             for (final c in [
                               'الكل',
+                              ...((owner ? restaurant['menu_categories'] : selected?['menu_categories']) as List? ?? const []).map((v) => '$v'),
                               ...menu
                                   .map(
                                     (m) => (m['category'] ?? 'أخرى').toString(),

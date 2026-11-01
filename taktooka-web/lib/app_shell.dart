@@ -253,6 +253,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     );
   }
 
+  bool foodNoticeOpen = false;
   void openNotice(Json n) {
     if (!mounted || !backend.loggedIn) return;
     if (n['kind'] == 'offer') {
@@ -261,6 +262,12 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       return;
     }
     final navigator = Navigator.of(context);
+    if (n['screen'] == 'food' && n['request_type'] == 'courier') {
+      if (foodNoticeOpen) return;
+      foodNoticeOpen = true;
+      navigator.push(MaterialPageRoute(builder: (_) => FoodPage(b: backend, initialOrderId: n['order_id']?.toString()))).whenComplete(() => foodNoticeOpen = false);
+      return;
+    }
     navigator.popUntil((route) => route.isFirst);
     switch (n['screen']) {
       case 'food':

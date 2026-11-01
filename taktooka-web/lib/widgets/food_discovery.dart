@@ -1,3 +1,4 @@
+import 'food_price_filter.dart';
 import 'dart:async';
 
 import 'favorite_restaurants.dart';
@@ -70,6 +71,8 @@ class FoodDiscovery extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (_) => FoodSearchPage(
                     meals: meals,
+                    restaurants: restaurants,
+                    openRestaurant: openRestaurant,
                     findMeals: findMeals,
                     photo: photo,
                     open: openMeal,
@@ -137,7 +140,7 @@ class FoodDiscovery extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'موقعي الحالي – $area',
+                area == 'موقعي الحالي' ? area : 'موقعي الحالي – $area',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -165,7 +168,7 @@ class FoodDiscovery extends StatelessWidget {
                     ? 'العروض'
                     : selectedCategory.isNotEmpty
                     ? selectedCategory
-                    : 'وجبات مقترحة وعروض',
+                    : 'الوجبات الأكثر طلبًا',
                 style: heading(20),
               ),
             ),
@@ -174,7 +177,10 @@ class FoodDiscovery extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (_) => FoodSearchPage(
+                    initialMode: 'وجبات',
                     meals: meals,
+                    restaurants: restaurants,
+                    openRestaurant: openRestaurant,
                     findMeals: findMeals,
                     photo: photo,
                     open: openMeal,
@@ -185,60 +191,21 @@ class FoodDiscovery extends StatelessWidget {
             ),
           ],
         ),
-        for (final item in meals.take(30))
-          Card(
-            child: InkWell(
-              onTap: () => openMeal(item),
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: Row(
-                  textDirection: TextDirection.ltr,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.sizeOf(context).width * .48,
-                      child: photo(item['image_path'], height: 132),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(item['name'] ?? '', style: heading(17)),
-                          Text(
-                            item['restaurant_name'] ?? '',
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                          if (item['previous_price'] != null)
-                            Text(
-                              money(item['previous_price']),
-                              style: const TextStyle(
-                                decoration: TextDecoration.lineThrough,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          Text(
-                            money(item['price']),
-                            style: const TextStyle(
-                              color: scarlet,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          FilledButton(
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size(0, 36),
-                            ),
-                            onPressed: () => openMeal(item),
-                            child: const Text('اطلب هسه'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+        SizedBox(
+          height: 330 * MediaQuery.textScalerOf(context).scale(1).clamp(1, 2),
+          child: ListView.separated(scrollDirection: Axis.horizontal, itemCount: meals.length.clamp(0, 30), separatorBuilder: (_, __) => const SizedBox(width: 10), itemBuilder: (_, index) {
+            final item = meals[index];
+            return SizedBox(width: 178, child: Card(clipBehavior: Clip.antiAlias, child: InkWell(onTap: () => openMeal(item), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              photo(item['image_path'], height: 150),
+              Expanded(child: Padding(padding: const EdgeInsets.all(10), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text(item['name'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis, style: heading(18)),
+                Text(item['restaurant_name'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.grey)),
+                const Spacer(), Text(money(item['price']), style: const TextStyle(color: scarlet, fontWeight: FontWeight.bold, fontSize: 19)),
+                const SizedBox(height: 8), FilledButton(onPressed: () => openMeal(item), child: const Text('اطلب هسه')),
+              ]))),
+            ]))));
+          }),
+        ),
       ],
       for (final shop in restaurants)
         Card(
@@ -374,12 +341,18 @@ class _OfferNeonState extends State<OfferNeon>
 
 class FoodSearchPage extends StatefulWidget {
   final List<Json> meals;
+  final String initialMode;
+  final List<Json> restaurants;
+  final ValueChanged<Json>? openRestaurant;
   final Future<List<Json>> Function(String)? findMeals;
   final Widget Function(dynamic, {double height}) photo;
   final ValueChanged<Json> open;
   const FoodSearchPage({
     super.key,
     required this.meals,
+    this.initialMode = 'الكل',
+    this.restaurants = const [],
+    this.openRestaurant,
     this.findMeals,
     required this.photo,
     required this.open,
@@ -390,6 +363,8 @@ class FoodSearchPage extends StatefulWidget {
 
 class _FoodSearchPageState extends State<FoodSearchPage> {
   String query = '';
+  String mode = 'الكل';
+  RangeValues? priceRange;
   Timer? timer;
   int revision = 0;
   List<Json>? remote;
@@ -398,6 +373,7 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
   @override
   void initState() {
     super.initState();
+    mode = widget.initialMode;
     fetch('');
   }
 
@@ -450,49 +426,29 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
           ).contains(normalize(query.trim())),
         )
         .toList();
+    final visibleMeals = mode == 'مطاعم' ? <Json>[] : matches.where((m) { final p = (m['price'] as num? ?? 0).toDouble(); return priceRange == null || (p >= priceRange!.start && p <= priceRange!.end); }).toList();
+    final visibleShops = mode == 'وجبات' ? <Json>[] : widget.restaurants.where((r) => normalize('${r['name']} ${r['description'] ?? ''}').contains(normalize(query.trim()))).toList();
+    final count = visibleMeals.length + visibleShops.length;
     return Scaffold(
       appBar: AppBar(title: const Text('البحث عن الطعام')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              autofocus: true,
-              onChanged: fetch,
-              decoration: const InputDecoration(
-                hintText: 'ابحث عن وجبة أو مطعم',
-                prefixIcon: Icon(Icons.search),
-              ),
-            ),
-          ),
-          if (loading) const LinearProgressIndicator(),
-          if (error != null)
-            TextButton(onPressed: () => fetch(query), child: Text(error!)),
-          Expanded(
-            child: matches.isEmpty
-                ? const Center(child: Text('ماكو وجبات مطابقة للبحث'))
-                : ListView.builder(
-                    itemCount: matches.length,
-                    itemBuilder: (_, index) {
-                      final item = matches[index];
-                      return ListTile(
-                        leading: SizedBox(
-                          width: 64,
-                          child: widget.photo(item['image_path'], height: 64),
-                        ),
-                        title: Text(item['name'] ?? ''),
-                        subtitle: Text(
-                          '${item['restaurant_name'] ?? ''} · ${money(item['price'])}',
-                        ),
-                        onTap: () {
-                          widget.open(item);
-                        },
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
+      body: Column(children: [
+        Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+          Expanded(child: TextField(autofocus: true, onChanged: fetch, decoration: InputDecoration(hintText: 'ابحث عن وجبة أو مطعم', prefixIcon: const Icon(Icons.search), filled: true, fillColor: const Color(0xfff5f5f7), border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none)))),
+          const SizedBox(width: 8), IconButton.outlined(tooltip: 'تصفية الأسعار', color: scarlet, onPressed: () async { final result = await showFoodPriceFilter(context, minimum: priceRange?.start ?? 0, maximum: priceRange?.end ?? 100000); if (result != null && mounted) setState(() => priceRange = result); }, icon: const Icon(Icons.tune)),
+        ])),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Wrap(spacing: 8, children: [for (final label in ['الكل', 'وجبات', 'مطاعم']) ChoiceChip(label: Text(label), selected: mode == label, selectedColor: scarlet, labelStyle: TextStyle(color: mode == label ? Colors.white : Colors.black), onSelected: (_) => setState(() => mode = label))])),
+        Padding(padding: const EdgeInsets.all(16), child: Row(children: [Expanded(child: Text('نتائج البحث', style: heading(24))), Text('$count نتائج', style: const TextStyle(color: Colors.grey))])),
+        if (loading) const LinearProgressIndicator(),
+        if (error != null) TextButton(onPressed: () => fetch(query), child: Text(error!)),
+        Expanded(child: count == 0 ? const Center(child: Text('ماكو وجبات مطابقة للبحث')) : ListView(padding: const EdgeInsets.symmetric(horizontal: 12), children: [
+          for (final shop in visibleShops) Card(child: ListTile(leading: SizedBox(width: 72, child: widget.photo(shop['image_path'], height: 72)), title: Text(shop['name'] ?? '', style: heading(18)), subtitle: const Text('مطعم'), trailing: const Icon(Icons.chevron_left), onTap: widget.openRestaurant == null ? null : () => widget.openRestaurant!(shop))),
+          for (final item in visibleMeals) Card(child: InkWell(onTap: () => widget.open(item), child: Padding(padding: const EdgeInsets.all(8), child: Row(children: [
+            SizedBox(width: 94, child: widget.photo(item['image_path'], height: 96)), const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(item['name'] ?? '', style: heading(19)), Text(item['restaurant_name'] ?? '', style: const TextStyle(color: Colors.grey)), const SizedBox(height: 4), Text(money(item['price']), style: const TextStyle(color: scarlet, fontWeight: FontWeight.bold, fontSize: 21))])),
+            IconButton.filledTonal(tooltip: 'إضافة الوجبة', onPressed: () => widget.open(item), icon: const Icon(Icons.add, color: scarlet)),
+          ])))),
+        ])),
+      ]),
     );
   }
 }
