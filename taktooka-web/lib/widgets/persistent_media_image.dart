@@ -17,7 +17,9 @@ class FoodMediaCache {
   FoodMediaCache({http.Client? client}) : client = client ?? http.Client();
   String key(String url) => sha256.convert(utf8.encode(url)).toString();
   Future<Uint8List> load(String url) =>
-      pending[url] ??= _load(url).whenComplete(() => pending.remove(url));
+      pending[url] ??= _load(url).whenComplete(() {
+        pending.remove(url);
+      });
   Future<Uint8List> _load(String url) async {
     if (memory[url] case final Uint8List bytes) return bytes;
     final saved = await MediaStore.read(key(url));

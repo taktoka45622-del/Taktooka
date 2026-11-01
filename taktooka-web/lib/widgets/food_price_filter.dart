@@ -23,7 +23,7 @@ class _FoodPriceFilterState extends State<_FoodPriceFilter> {
   late RangeValues range;
   late TextEditingController lower, upper;
   String? error;
-  String amount(num n) => money(n).replaceAll('د.ع', '').trim();
+  String amount(num n) => money(n).replaceAll(RegExp(r'[^0-9,]'), '');
   int? value(TextEditingController c) =>
       int.tryParse(westernDigits(c.text).replaceAll(RegExp(r'[,\s]'), ''));
   @override

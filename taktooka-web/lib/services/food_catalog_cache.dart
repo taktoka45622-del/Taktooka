@@ -64,9 +64,9 @@ class FoodCatalogCache extends ChangeNotifier {
         saved = _values[key(action, data)];
     if (saved != null && DateTime.now().difference(saved.$1).inSeconds < 90)
       return jsonDecode(jsonEncode(saved.$2));
-    final value = await (_pending[name] ??= request().whenComplete(
-      () => _pending.remove(name),
-    ));
+    final value = await (_pending[name] ??= request().whenComplete(() {
+      _pending.remove(name);
+    }));
     if (round == generation)
       _values[key(action, data)] = (
         DateTime.now(),
