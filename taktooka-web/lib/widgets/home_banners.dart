@@ -25,6 +25,7 @@ class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
   static DateTime? lastChecked;
   List<Json> _rows = List<Json>.from(savedRows);
   late final FoodCatalogCache cache;
+  bool receivedFresh = false;
   void changed() {
     lastChecked = null;
     unawaited(_load());
@@ -35,7 +36,7 @@ class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
       final raw = (await SharedPreferences.getInstance()).getString(
         'home-banners-v2',
       );
-      if (raw != null && mounted && _rows.isEmpty)
+      if (raw != null && mounted && _rows.isEmpty && !receivedFresh)
         setState(() => _rows = Backend.rows(jsonDecode(raw)));
     } catch (_) {}
   }
@@ -72,6 +73,7 @@ class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
           .limit(100)
           .timeout(const Duration(seconds: 10));
       final next = rows.map(Json.from).toList();
+      receivedFresh = true;
       lastChecked = DateTime.now();
       final paths = next.map((r) => r['image_path']).toSet();
       for (final old in savedRows) {

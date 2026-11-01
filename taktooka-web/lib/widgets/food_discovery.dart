@@ -663,7 +663,9 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
+            child: Wrap(
+              spacing: 0,
+              runSpacing: 8,
               children: [
                 for (final label in ['الكل', 'وجبات', 'مطاعم'])
                   Padding(

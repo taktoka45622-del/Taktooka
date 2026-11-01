@@ -36,6 +36,9 @@ void main() {
       },
     );
     expect(uri.path, '/9647701234567');
+    expect(foodPhoneNumbers('هاتف 07701234567 ورقم طلب 200770123456789'), [
+      '07701234567',
+    ]);
     for (final label in ['123456', 'مطعم', 'زبون', 'كابتن', '13,000'])
       expect(uri.queryParameters['text'], contains(label));
   });

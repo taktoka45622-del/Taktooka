@@ -1486,6 +1486,20 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                   Text(
                     'تم توصيل: ${countFor(g.key, 'delivered')} · مرفوض: ${countFor(g.key, 'rejected')}',
                   ),
+                  OutlinedButton.icon(
+                    onPressed: () => openFoodWhatsApp(
+                      g.value.first[owner
+                          ? 'captain_phone'
+                          : 'restaurant_phone'],
+                      message:
+                          'تكتوكة — حساب المطعم\n${g.value.first[owner ? 'captain_name' : 'restaurant_name']}\nالمبلغ بالذمة: ${money(g.value.fold<num>(0, (s, d) => s + (d['amount'] as num)))}',
+                    ),
+                    icon: const Icon(
+                      Icons.chat_outlined,
+                      color: Color(0xff128c7e),
+                    ),
+                    label: const Text('واتساب'),
+                  ),
                   if (owner)
                     FilledButton(
                       onPressed: busy

@@ -59,3 +59,17 @@ Future<bool> openFoodWhatsApp(
     mode: LaunchMode.externalApplication,
   );
 }
+
+List<String> foodPhoneNumbers(String text) {
+  final source = westernDigits(text), digits = RegExp(r'[0-9]');
+  final values = <String>{};
+  for (final match in RegExp(
+    r'(?:\+?964|00964|0)[ -]*7(?:[ -]*[0-9]){9}',
+  ).allMatches(source)) {
+    if (match.start > 0 && digits.hasMatch(source[match.start - 1]) ||
+        match.end < source.length && digits.hasMatch(source[match.end]))
+      continue;
+    values.add(match.group(0)!);
+  }
+  return values.toList();
+}

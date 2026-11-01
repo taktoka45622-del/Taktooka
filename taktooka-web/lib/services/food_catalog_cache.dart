@@ -41,6 +41,7 @@ class FoodCatalogCache extends ChangeNotifier {
   void removeListener(VoidCallback listener) {
     super.removeListener(listener);
     if (!hasListeners && channel != null) {
+      if (b.db.getChannels().length == 1) b.db.realtime.disconnect();
       b.db.removeChannel(channel!);
       channel = null;
     }

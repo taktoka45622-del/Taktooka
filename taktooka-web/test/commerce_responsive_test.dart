@@ -174,6 +174,15 @@ void main() {
         localStorage: EmptyLocalStorage(),
       ),
       httpClient: MockClient((request) async {
+        if (request.url.path.endsWith('/rpc/tkt_food_storefront'))
+          return http.Response(
+            jsonEncode({
+              'code': 'PGRST202',
+              'message': 'storefront migration pending',
+            }),
+            404,
+            headers: {'content-type': 'application/json'},
+          );
         dynamic data;
         if (request.url.path.contains('/auth/v1/token')) {
           String part(Object v) =>

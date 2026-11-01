@@ -213,6 +213,8 @@ class _ChatPageState extends State<ChatPage> {
               ),
               if (widget.room == null && supportOrders.isNotEmpty)
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  itemHeight: 64,
                   initialValue:
                       supportOrders.any((o) => o['id'] == selectedOrder)
                       ? selectedOrder
@@ -230,6 +232,9 @@ class _ChatPageState extends State<ChatPage> {
                         value: o['id'],
                         child: Text(
                           'طلب #${foodOrderNumber(o)} — ${o['restaurant_name'] ?? ''}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13),
                         ),
                       ),
                   ],
@@ -289,6 +294,26 @@ class _ChatPageState extends State<ChatPage> {
                             : Theme.of(context).colorScheme.onSurface,
                         fontSize: 16,
                       ),
+                    ),
+                    Wrap(
+                      children: [
+                        for (final phone in foodPhoneNumbers(
+                          '${m['body'] ?? ''}',
+                        ))
+                          TextButton.icon(
+                            onPressed: () => openFoodWhatsApp(
+                              phone,
+                              message: 'تكتوكة\n${m['body'] ?? ''}',
+                            ),
+                            icon: const Icon(Icons.chat_outlined, size: 17),
+                            label: Text('واتساب $phone'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: own
+                                  ? Colors.white
+                                  : const Color(0xff128c7e),
+                            ),
+                          ),
+                      ],
                     ),
                     AppText(
                       displayTime(m['created_at']),
