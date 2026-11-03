@@ -1,5 +1,5 @@
 import {createCommercePage} from './commerce.js?v=1.7.4';
-import {createServerMonitor} from './server-monitor.js?v=1';
+import {createServerMonitor} from './server-monitor.js?v=2';
 import {createAccountAdmin} from './account-admin.js?v=1.6.93';
 import {setupPhoneActions,normalizeWhatsAppPhone,whatsappUrl} from './phone-actions.js?v=1.7.11';
 import {createGlobalSearch} from './global-search.js?v=1';
@@ -391,7 +391,7 @@ function canEdit(page){if(page==='exchanges'||page==='server')return dashboardAc
 async function dashboardRpc(name,action,data={}){const r=await db.rpc(name,{p_action:action,p_data:data});if(r.error)throw r.error;return r.data;}
 const accountAdmin=createAccountAdmin({document,rpc:(action,data)=>dashboardRpc('tkt_account_admin',action,data),invoke:async body=>{const {data,error}=await db.functions.invoke('taktooka-owner-account-delete',{body});if(error||!data?.ok){let detail=data?.error;try{if(!detail&&error?.context)detail=(await error.context.json()).error;}catch{}throw new Error(detail||'تعذّر حذف الحساب؛ أعد المحاولة.');}return data;},openDetail,button,text,record,money,localPhone,run,notify:status,canManage:()=>dashboardAccess?.owner===true,onDeleted:async result=>{closeDetail();renderCache.clear?.();if(result.self){await db.auth.signOut();location.reload();return;}await loadPage(activePage);}});
 const exchangesPage=createExchangesPage({document,rpc:(action,data)=>dashboardRpc('tkt_exchange',action,data),run,notify:status,money,dates,openDetail,closeDetail,openProfile:id=>openUserProfile(id),resetPassword:u=>resetPassword(u),openSupport:openExchangeSupport,openStatement:id=>operations.statement(id),deleteAccount:(kind,id)=>accountAdmin.open(kind,id)});
-const serverMonitor=createServerMonitor({document,rpc:(action,data)=>dashboardRpc('tkt_server_monitor',action,data),run});
+const serverMonitor=createServerMonitor({document,rpc:(action,data)=>dashboardRpc('tkt_server_monitor',action,data),cleanupRpc:(action,data)=>dashboardRpc('tkt_log_cleanup',action,data),run});
 const commercePage=createCommercePage({document,rpc:async(action,data={})=>{const {data:result,error}=await db.rpc('tkt_commerce',{p_action:action,p_data:data});if(error)throw error;return result;},money,canEdit,run,profile:openUserProfile,phone:localPhone});
 const companyPage=createCompanyPage({document,rpc:(action,data)=>dashboardRpc('tkt_company',action,data),money,dates,canEdit:()=>canEdit('finance'),canOpenProfile:()=>canView('inventory')||canView('users'),openProfile:id=>run(()=>openUserProfile(id)),confirmVoid:()=>prompt('سبب إلغاء المصروف')});
 async function refreshDashboardAccess(){const r=await db.rpc('tkt_dashboard_access');if(r.error)throw r.error;dashboardAccess=r.data;applyDashboardPermissions();}
@@ -754,3 +754,4 @@ setupKeyboardShortcuts({document,window,menu:$('menuToggle'),notifications:$('no
 const {data:{session}}=await db.auth.getSession();if(session){await run(load);const id=new URL(window.location.href).searchParams.get('notice');if(id){const n=notificationRows.find(n=>n.id===id);if(n)await run(()=>openNotification(n));}}
 
 setupPhoneActions(document);
+

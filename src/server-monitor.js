@@ -2,8 +2,8 @@ const number=n=>new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(
 const date=v=>v?new Date(v).toLocaleString('en-GB',{timeZone:'Asia/Baghdad',hour12:true}):'غير متاح';
 export function usageState(value,limit){if(value==null||!Number.isFinite(Number(value))||!limit)return {percent:null,label:'غير متاح',tone:'unknown'};const percent=Number(value)/limit*100;return {percent,label:percent>=100?'وصل الحد':percent>=90?'قريب من الامتلاء':percent>=75?'تنبيه':'ضمن الحد',tone:percent>=90?'danger':percent>=75?'warning':'good'};}
 export function remainingPeriod(end,now=Date.now()){if(!end)return 'موعد التجديد غير متاح من الربط الحالي';const ms=new Date(end).getTime()-now;if(!Number.isFinite(ms))return 'موعد غير صالح';if(ms<=0)return 'انتهت الفترة المسجلة؛ حدّث القراءة من المزود';return `${number(Math.floor(ms/86400000))} يوم و${number(Math.floor(ms/3600000)%24)} ساعة و${number(Math.floor(ms/60000)%60)} دقيقة`}
-export function createServerMonitor({document,rpc,run}){
- const root=document.getElementById('serverMonitor');let result,pending=null;
+export function createServerMonitor({document,rpc,cleanupRpc,run}){
+ const root=document.getElementById('serverMonitor');let result,cleanup,cleanupError=false,notice="",pending=null;
  const el=(tag,value,cls)=>{const e=document.createElement(tag);if(value!=null)e.textContent=value;if(cls)e.className=cls;return e;};
  const link=(title,url)=>{const a=el('a',title,'secondary monitor-link');a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a;};
  function stat(parent,label,value,note){const c=el('article',null,'monitor-stat');c.append(el('h3',label),el('strong',value==null?'غير متاح':number(value)),el('p',note));parent.append(c);}
@@ -11,6 +11,18 @@ export function createServerMonitor({document,rpc,run}){
  function render(){
   const {provider:p={},live:l={},at}=result;root.replaceChildren();
   const head=el('div',null,'card monitor-heading'),refresh=el('button','تحديث الآن');refresh.type='button';refresh.onclick=()=>run(load);head.append(el('h2','مراقبة السيرفر'),el('p','قراءات السيرفر المباشرة منفصلة عن حصص المزود والخرائط.'),refresh,el('small',`آخر قراءة مباشرة: ${date(at)} · توقيت بغداد`));root.append(head);
+  const cleaning=el('div',null,'card');cleaning.append(el('h2','تنظيف سجل المهام'));
+  cleaning.append(el('p','يحذف سجلات نجاح وفشل المهام الأقدم من 7 أيام فقط. لا يحذف الرحلات أو طلبات الطعام أو المطاعم أو الصور أو الحسابات والأرصدة.'));
+  const cleanupFeedback=el('p',notice);cleanupFeedback.setAttribute('role','status');
+  if(cleanupError||!cleanup){cleaning.append(el('p','تعذر تحميل إعدادات التنظيف. حدّث القراءة للمحاولة مجددًا.'));}
+  else {
+   cleaning.append(el('p',`حجم سجل المهام: ${number(cleanup.log_bytes/1048576)} MB`),el('p',`آخر تنظيف: ${date(cleanup.last_run_at)} · المحذوف آخر مرة: ${number(cleanup.last_deleted)} سجل · المجموع: ${number(cleanup.total_deleted)}`));
+   const toggle=el('button',cleanup.enabled?'إيقاف التنظيف الدوري':'تفعيل التنظيف الدوري','secondary'),clean=el('button','تنظيف الآن');toggle.type=clean.type='button';
+   cleaning.append(el('p',cleanup.enabled?'التنظيف الدوري مفعّل؛ يعمل كل ساعة حتى لو الداشبورد مغلق.':'التنظيف الدوري متوقف؛ يمكن تفعيله أو التنظيف يدويًا.'));
+   const execute=(action,data)=>run(async()=>{toggle.disabled=clean.disabled=true;cleanupFeedback.textContent='جاري التنفيذ…';try{const response=await cleanupRpc(action,data);notice=action==='clean'?`تم حذف ${number(response.last_deleted)} سجل قديم.${response.last_deleted===response.batch_limit?' توجد دفعة كاملة؛ اضغط تنظيف الآن مجددًا أو فعّل التنظيف الدوري لاستكمال التراكم.':''}`:response.enabled?'تم تفعيل التنظيف الدوري.':'تم إيقاف التنظيف الدوري.';await load();}catch(error){cleanupFeedback.textContent='تعذر تنفيذ التنظيف أو حفظ الإعداد؛ حاول مرة ثانية.';throw error;}finally{toggle.disabled=clean.disabled=false;}});
+   toggle.onclick=()=>execute('configure',{enabled:!cleanup.enabled});clean.onclick=()=>execute('clean',{});cleaning.append(clean,toggle);
+  }
+  cleaning.append(cleanupFeedback,el('small','التنظيف يتم على دفعات حتى 20,000 سجل. المساحة المحذوفة تصبح قابلة لإعادة الاستخدام؛ رقم حجم القاعدة قد لا ينخفض فورًا.'));root.append(cleaning);
   const billing=el('div',null,'card');billing.append(el('h2','الخطة والتجديد والمبلغ'));
   const names={free:'مجانية',pro:'Pro',team:'Team',custom:'مخصصة'};billing.append(el('p',`الخطة حسب آخر تحقق: ${names[p.plan]||'غير متاحة'} · تاريخ التحقق ${date(p.verified_at)}`));
   const countdown=el('p',remainingPeriod(p.period_end));billing.append(el('p',`الفترة المسجلة: ${date(p.period_start)} ← ${date(p.period_end)}`),countdown);
@@ -39,6 +51,7 @@ export function createServerMonitor({document,rpc,run}){
   for(const [key,name]of [['egress','نقل البيانات GB'],['cached_egress','نقل البيانات المخزنة GB'],['edge','استدعاءات الدوال'],['realtime','رسائل Realtime'],['peak','ذروة اتصالات Realtime'],['mau','المستخدمون النشطون شهريًا'],['map_users','مستخدمو الخريطة حسب المزود'],['amount_usd','المبلغ المطلوب حسب فاتورة Supabase · دولار']])add(key,name);
   const save=el('button','حفظ القراءة الرسمية'),feedback=el('p');feedback.setAttribute('role','status');save.type='submit';form.append(save,feedback);form.onsubmit=e=>{e.preventDefault();run(async()=>{save.disabled=true;try{const data={};for(const [key,input]of Object.entries(fields)){data[key]=input.value===''?null:input.type==='number'?Number(input.value):input.type==='date'?input.value+'T00:00:00+03:00':input.value;}await rpc('save_provider',data);await load();}catch(error){feedback.textContent='تعذر حفظ القراءة؛ تحقق من الفترة والأرقام وحاول ثانية.';throw error;}finally{save.disabled=false;}});};details.append(form);root.append(details);
  }
- async function load(){if(pending)return pending;pending=(async()=>{try{result=await rpc('read');render();}catch(error){root.replaceChildren(el('div','تعذر جلب قراءة السيرفر. اضغط إعادة المحاولة؛ لا توجد قراءة حديثة.','card'));const retry=el('button','إعادة المحاولة');retry.onclick=()=>run(load);root.append(retry);throw error;}finally{pending=null;}})();return pending;}
+ async function load(){if(pending)return pending;pending=(async()=>{try{result=await rpc('read');cleanupError=false;try{cleanup=cleanupRpc?await cleanupRpc('read'):null;}catch{cleanup=null;cleanupError=true;}render();}catch(error){root.replaceChildren(el('div','تعذر جلب قراءة السيرفر. اضغط إعادة المحاولة؛ لا توجد قراءة حديثة.','card'));const retry=el('button','إعادة المحاولة');retry.onclick=()=>run(load);root.append(retry);throw error;}finally{pending=null;}})();return pending;}
  return {load};
 }
+
