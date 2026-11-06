@@ -1,3 +1,5 @@
+import 'package:taktooka/widgets/skeleton.dart';
+import 'package:taktooka/services/page_snapshot_cache.dart';
 import 'package:taktooka/services/commerce.dart';
 import 'package:taktooka/services/food_contact.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
@@ -60,6 +62,14 @@ class _ChatPageState extends State<ChatPage> {
   void initState() {
     super.initState();
     selectedOrder = widget.orderId;
+    final snapshot = PageSnapshotCache.read(
+      widget.b,
+      'chat:${widget.room ?? "self"}',
+    );
+    if (snapshot != null) {
+      messages = Backend.rows(snapshot['messages']);
+      loading = false;
+    }
     unawaited(loadContext());
     load();
     timer = Timer.periodic(const Duration(seconds: 10), (_) {
@@ -99,12 +109,17 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _loadOnce() async {
     if (!mounted) return;
+    final session = widget.b.cacheEpoch;
     try {
       final wasBottom =
           !scroll.hasClients ||
           scroll.position.maxScrollExtent - scroll.offset < 100;
       final result = Backend.rows(await widget.b.extra('messages', roomData));
       if (!mounted) return;
+      if (session != widget.b.cacheEpoch) return;
+      PageSnapshotCache.save(widget.b, 'chat:${widget.room ?? "self"}', {
+        'messages': result,
+      });
       final changed = !sameSnapshot(messages, result);
       final first = loading;
       if (changed || loading || error != null) {
@@ -245,7 +260,7 @@ class _ChatPageState extends State<ChatPage> {
             ],
           ),
         ),
-      if (loading) const TuktukLoader(),
+      if (loading && messages.isEmpty) const TuktukLoader(),
       if (error != null) TextButton(onPressed: load, child: AppText(error!)),
       Expanded(
         child: ListView.builder(
@@ -358,10 +373,7 @@ class _ChatPageState extends State<ChatPage> {
                     ? const SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
+                        child: SkeletonActivity(height: 16),
                       )
                     : const Icon(Icons.send),
               ),

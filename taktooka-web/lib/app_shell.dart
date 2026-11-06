@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/account_startup_gate.dart';
 import 'package:taktooka/widgets/double_back_exit.dart';
 import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/core/display_format.dart';
@@ -161,6 +162,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
   }
 
   Future<void> startWithPermissions() async {
+    unawaited(backend.start());
     var locationAllowed = false;
     try {
       final permission = await requestLocationAccess();
@@ -175,7 +177,6 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
       unawaited(
         backend.locate().then<void>(_warmLocalMap, onError: (Object _) {}),
       );
-    unawaited(backend.start());
     await notices.requestStartupPermission();
     if (!mounted) return;
     unawaited(notices.start());
@@ -550,6 +551,17 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
         body: SafeArea(child: PhoneLoginPage(backend: backend)),
       );
     }
+    return AccountStartupGate(
+      ready: backend.accountReady,
+      error: backend.error,
+      syncing: backend.syncing,
+      retry: () => backend.refresh(),
+      signOut: () => backend.signOut(),
+      builder: buildAccountShell,
+    );
+  }
+
+  Widget buildAccountShell(BuildContext context) {
     if (backend.restaurantOwner) return FoodPage(b: backend);
     if (tab > 3) tab = 3;
     return Scaffold(
@@ -617,7 +629,7 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
           Expanded(
             child: ColoredBox(
               color: Theme.of(context).scaffoldBackgroundColor,
-              child: KeyedSubtree(key: ValueKey(tab), child: tabBody(tab)),
+              child: IndexedStack(index: tab, children: tabViews()),
             ),
           ),
         ],

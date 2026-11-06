@@ -199,7 +199,6 @@ class _StreetMapLayerState extends State<StreetMapLayer> {
   }
 
   static Future<vector.Style> _load(bool dark, String language) async {
-    await ensureMapConfiguration();
     final uri =
         'https://api.mapbox.com/styles/v1/$mapboxStyle?access_token=$mapboxToken';
     final results = await resources(uri);

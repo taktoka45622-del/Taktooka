@@ -31,7 +31,10 @@ void main() {
       await preferences.load();
       await preferences.prepareAccountEntry();
       expect(preferences.hasUsedAccount, isTrue);
-      expect((await SharedPreferences.getInstance()).getString(key), 'old-session');
+      expect(
+        (await SharedPreferences.getInstance()).getString(key),
+        'old-session',
+      );
     },
   );
 }

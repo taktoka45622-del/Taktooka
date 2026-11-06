@@ -1,3 +1,4 @@
+import 'persistent_media_image.dart';
 import 'package:taktooka/services/media_url.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -59,8 +60,12 @@ class FoodOptionsEditor extends StatelessWidget {
               leading: !size && rows[i]['image_path'] != null
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        mediaUrl(supabaseUrl, 'restaurant-images', rows[i]['image_path']),
+                      child: PersistentMediaImage(
+                        mediaUrl(
+                          supabaseUrl,
+                          'restaurant-images',
+                          rows[i]['image_path'],
+                        ),
                         width: 42,
                         height: 42,
                         fit: BoxFit.cover,
@@ -190,7 +195,7 @@ class _OptionDialogState extends State<_OptionDialog> {
             if (!widget.size) ...[
               const SizedBox(height: 12),
               if (image != null)
-                Image.network(
+                PersistentMediaImage(
                   mediaUrl(supabaseUrl, 'restaurant-images', image!),
                   height: 100,
                   fit: BoxFit.cover,

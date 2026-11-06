@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'dart:async';
 
@@ -29,7 +30,7 @@ class _RecoveryChatState extends State<RecoveryChat> {
   List<Map<String, dynamic>> messages = [];
   String? thread, token, error;
   Timer? timer;
-  bool reading = false, sending = false;
+  bool reading = false, sending = false, initialLoading = true;
   bool get admin => widget.adminThread != null;
   @override
   void initState() {
@@ -65,7 +66,11 @@ class _RecoveryChatState extends State<RecoveryChat> {
       }
       await load();
     } catch (_) {
-      if (mounted) setState(() => error = 'تعذّر فتح الدردشة، حاول مرة ثانية');
+      if (mounted)
+        setState(() {
+          initialLoading = false;
+          error = 'تعذّر فتح الدردشة، حاول مرة ثانية';
+        });
     }
   }
 
@@ -91,13 +96,18 @@ class _RecoveryChatState extends State<RecoveryChat> {
       }
       if (mounted)
         setState(() {
+          initialLoading = false;
           messages = rows
               .map((v) => Map<String, dynamic>.from(v as Map))
               .toList();
           error = null;
         });
     } catch (_) {
-      if (mounted) setState(() => error = 'تعذّر تحديث الرسائل');
+      if (mounted)
+        setState(() {
+          initialLoading = false;
+          error = 'تعذّر تحديث الرسائل';
+        });
     } finally {
       reading = false;
     }
@@ -145,27 +155,29 @@ class _RecoveryChatState extends State<RecoveryChat> {
             child: AppText(error!),
           ),
         Expanded(
-          child: ListView.builder(
-            reverse: true,
-            padding: const EdgeInsets.all(16),
-            itemCount: messages.length,
-            itemBuilder: (context, i) {
-              final m = messages[i];
-              return Align(
-                alignment: m['is_admin'] == true
-                    ? Alignment.centerRight
-                    : Alignment.centerLeft,
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: AppText(
-                      '${m['is_admin'] == true ? 'الدعم' : 'أنت'}: ${m['body']}',
-                    ),
-                  ),
+          child: initialLoading
+              ? const SkeletonPage()
+              : ListView.builder(
+                  reverse: true,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: messages.length,
+                  itemBuilder: (context, i) {
+                    final m = messages[i];
+                    return Align(
+                      alignment: m['is_admin'] == true
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: AppText(
+                            '${m['is_admin'] == true ? 'الدعم' : 'أنت'}: ${m['body']}',
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
         SafeArea(
           top: false,

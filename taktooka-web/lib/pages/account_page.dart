@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'package:taktooka/core/display_format.dart';
 
@@ -201,10 +202,7 @@ class _AccountPageState extends State<AccountPage> {
                       ? const SizedBox(
                           width: 18,
                           height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+                          child: SkeletonActivity(height: 16),
                         )
                       : const Icon(
                           Icons.camera_alt_outlined,
@@ -305,10 +303,7 @@ class _AccountPageState extends State<AccountPage> {
                       ? const SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+                          child: SkeletonActivity(height: 16),
                         )
                       : const AppText('حفظ بياناتي'),
                 ),

@@ -43,29 +43,38 @@ void main() {
       ),
     ),
   );
-  testWidgets('taxi and delivery handlers are excluded, including saved defaults', (tester) async {
-    SharedPreferences.setMockInitialValues({
-      MapNavigation.preferenceKey: 'taxi.handler',
-    });
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(MapNavigation.channel, (call) async {
-          calls.add(call);
-          if (call.method == 'apps') return [
-            {'id': 'taxi.handler', 'name': 'Baly'},
-            {'id': 'delivery.handler', 'name': 'Toters'},
-            {'id': 'com.waze', 'name': 'Waze'},
-          ];
-          return true;
-        });
-    await screen(tester);
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
-    expect(find.text('Baly'), findsNothing);
-    expect(find.text('Toters'), findsNothing);
-    expect(find.text('Waze'), findsOneWidget);
-    expect(calls.where((c) => c.method == 'open'), isEmpty);
-    expect((await SharedPreferences.getInstance()).getString(MapNavigation.preferenceKey), isNull);
-  });
+  testWidgets(
+    'taxi and delivery handlers are excluded, including saved defaults',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({
+        MapNavigation.preferenceKey: 'taxi.handler',
+      });
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(MapNavigation.channel, (call) async {
+            calls.add(call);
+            if (call.method == 'apps')
+              return [
+                {'id': 'taxi.handler', 'name': 'Baly'},
+                {'id': 'delivery.handler', 'name': 'Toters'},
+                {'id': 'com.waze', 'name': 'Waze'},
+              ];
+            return true;
+          });
+      await screen(tester);
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.text('Baly'), findsNothing);
+      expect(find.text('Toters'), findsNothing);
+      expect(find.text('Waze'), findsOneWidget);
+      expect(calls.where((c) => c.method == 'open'), isEmpty);
+      expect(
+        (await SharedPreferences.getInstance()).getString(
+          MapNavigation.preferenceKey,
+        ),
+        isNull,
+      );
+    },
+  );
   testWidgets('once opens selected destination without remembering', (
     tester,
   ) async {
@@ -171,19 +180,36 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 6));
   });
-  testWidgets('settings saves app without launching and allows changing it', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: MapNavigationSetting())));
+  testWidgets('settings saves app without launching and allows changing it', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: MapNavigationSetting())),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('تحديد تطبيق الخرائط')); await tester.pumpAndSettle();
-    await tester.tap(find.text('Google Maps')); await tester.pumpAndSettle();
+    await tester.tap(find.text('تحديد تطبيق الخرائط'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Google Maps'));
+    await tester.pumpAndSettle();
     expect(find.text('Google Maps'), findsOneWidget);
-    expect((await SharedPreferences.getInstance()).getString(MapNavigation.preferenceKey), 'com.google.android.apps.maps');
+    expect(
+      (await SharedPreferences.getInstance()).getString(
+        MapNavigation.preferenceKey,
+      ),
+      'com.google.android.apps.maps',
+    );
     expect(calls.where((c) => c.method == 'open'), isEmpty);
-    await tester.tap(find.text('تحديد تطبيق الخرائط')); await tester.pumpAndSettle();
-    await tester.tap(find.text('Waze')); await tester.pumpAndSettle();
+    await tester.tap(find.text('تحديد تطبيق الخرائط'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Waze'));
+    await tester.pumpAndSettle();
     expect(find.text('Waze'), findsOneWidget);
-    expect((await SharedPreferences.getInstance()).getString(MapNavigation.preferenceKey), 'com.waze');
+    expect(
+      (await SharedPreferences.getInstance()).getString(
+        MapNavigation.preferenceKey,
+      ),
+      'com.waze',
+    );
     expect(calls.where((c) => c.method == 'open'), isEmpty);
   });
-
 }

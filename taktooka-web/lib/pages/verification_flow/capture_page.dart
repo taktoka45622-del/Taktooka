@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -350,7 +351,7 @@ class _CapturePageState extends State<CapturePage> with WidgetsBindingObserver {
                         );
                       },
                     ),
-                  if (loading) const Center(child: CircularProgressIndicator()),
+                  if (loading) const SkeletonPage(),
                   if (!loading && !paused)
                     Padding(
                       padding: EdgeInsets.symmetric(

@@ -1,3 +1,5 @@
+import 'package:taktooka/widgets/skeleton.dart';
+import 'package:taktooka/services/page_snapshot_cache.dart';
 import 'package:taktooka/services/refresh_gate.dart';
 import 'dart:async';
 
@@ -18,10 +20,15 @@ class _RecoveryInboxState extends State<RecoveryInbox> {
   List<Map<String, dynamic>> rows = [];
   String? error;
   Timer? timer;
-  bool loading = false;
+  bool loading = false, initialLoading = true;
   @override
   void initState() {
     super.initState();
+    final snapshot = PageSnapshotCache.read(widget.backend, 'recovery-inbox');
+    if (snapshot != null) {
+      rows = Backend.rows(snapshot['rows']);
+      initialLoading = false;
+    }
     load();
     timer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted &&
@@ -46,16 +53,21 @@ class _RecoveryInboxState extends State<RecoveryInbox> {
           .select('id,phone,name,created_at')
           .order('created_at', ascending: false)
           .limit(100);
+      if (!mounted) return;
       final next = result.map((v) => Map<String, dynamic>.from(v)).toList();
-      if (mounted && (!sameSnapshot(rows, next) || error != null))
+      PageSnapshotCache.save(widget.backend, 'recovery-inbox', {'rows': next});
+      if (mounted &&
+          (!sameSnapshot(rows, next) || error != null || initialLoading))
         setState(() {
           rows = next;
+          initialLoading = false;
           error = null;
         });
     } catch (_) {
       if (mounted) setState(() => error = 'تعذّر تحميل طلبات الدعم');
     } finally {
       loading = false;
+      if (mounted && initialLoading) setState(() => initialLoading = false);
     }
   }
 
@@ -68,7 +80,13 @@ class _RecoveryInboxState extends State<RecoveryInbox> {
         children: [
           if (error != null)
             TextButton(onPressed: load, child: AppText(error!)),
-          if (rows.isEmpty) const ListTile(title: AppText('ماكو طلبات حالياً')),
+          if (initialLoading)
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: SkeletonContent(),
+            ),
+          if (rows.isEmpty && !initialLoading && error == null)
+            const ListTile(title: AppText('ماكو طلبات حالياً')),
           for (final row in rows)
             ListTile(
               title: AppText('${row['name']}'),

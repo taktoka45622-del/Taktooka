@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/services/page_snapshot_cache.dart';
 import 'package:taktooka/services/refresh_gate.dart';
 import 'package:taktooka/core/display_format.dart';
@@ -245,7 +246,7 @@ class _HistoryPageState extends State<HistoryPage> {
       if (filter != 'customers' && error != null)
         AppText(error!, style: const TextStyle(color: scarlet)),
       if (filter != 'customers' && loading && lineRuns.isEmpty)
-        const LinearProgressIndicator(),
+        const SkeletonActivity(),
       if (entries.isEmpty && !loading)
         AppText(
           filter == 'lines'

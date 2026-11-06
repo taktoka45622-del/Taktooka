@@ -52,7 +52,7 @@ void main() {
           expect(find.textContaining('رمز'), findsNothing);
           expect(tester.takeException(), isNull);
           if (captain) {
-            expect(find.text('ويز للزبون'), findsOneWidget);
+            expect(find.text('الملاحة للزبون'), findsOneWidget);
             await tester.tap(find.text('بدء الرحلة'));
             expect(action, 'in_progress');
             expect(find.byType(AlertDialog), findsNothing);

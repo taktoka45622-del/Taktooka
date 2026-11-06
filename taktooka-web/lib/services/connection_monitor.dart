@@ -27,7 +27,9 @@ class ConnectionMonitor extends ChangeNotifier {
     this.timeout = const Duration(seconds: 5),
     this.interval = const Duration(seconds: 15),
   }) : probe = probe ?? _probeNetwork,
-       changes = changes ?? (probe == null ? Connectivity().onConnectivityChanged : null);
+       changes =
+           changes ??
+           (probe == null ? Connectivity().onConnectivityChanged : null);
 
   static bool _connected(List<ConnectivityResult> results) =>
       results.any((result) => result != ConnectivityResult.none);
@@ -43,7 +45,10 @@ class ConnectionMonitor extends ChangeNotifier {
       if (_connected(results)) {
         _setStatus(NetworkStatus.online);
       } else {
-        _settle = Timer(const Duration(milliseconds: 800), () => unawaited(check()));
+        _settle = Timer(
+          const Duration(milliseconds: 800),
+          () => unawaited(check()),
+        );
       }
     }, onError: (Object error) {});
     unawaited(check());

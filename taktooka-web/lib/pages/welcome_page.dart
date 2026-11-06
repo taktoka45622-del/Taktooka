@@ -8,7 +8,7 @@ class FirstLaunchGate extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: appPreferences,
     builder: (context, _) =>
-    appPreferences.onboardingSeen ? const Shell() : const WelcomePage(),
+        appPreferences.onboardingSeen ? const Shell() : const WelcomePage(),
   );
 }
 
@@ -37,8 +37,10 @@ class _WelcomePageState extends State<WelcomePage> {
     super.didChangeDependencies();
     if (preparingArtwork) return;
     preparingArtwork = true;
-    Future.wait(artwork.map((image) => precacheImage(image, context))).then((_) {
-        if (mounted) setState(() => artworkReady = true);
+    Future.wait(artwork.map((image) => precacheImage(image, context))).then((
+      _,
+    ) {
+      if (mounted) setState(() => artworkReady = true);
     });
   }
 
@@ -117,7 +119,10 @@ class _WelcomePageState extends State<WelcomePage> {
                 padding: const EdgeInsets.only(left: 12, top: 4),
                 child: TextButton(
                   onPressed: saving ? null : finish,
-                  child: const Text('تخطي', style: TextStyle(color: Colors.grey)),
+                  child: const Text(
+                    'تخطي',
+                    style: TextStyle(color: Colors.grey),
+                  ),
                 ),
               ),
             ),
@@ -139,17 +144,22 @@ class _WelcomePageState extends State<WelcomePage> {
                           child: ExcludeSemantics(
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(3, (dot) => Container(
+                              children: List.generate(
+                                3,
+                                (dot) => Container(
                                   width: 10,
                                   height: 10,
-                                  margin: const EdgeInsets.symmetric(horizontal: 5),
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                  ),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: dot == index
-                                    ? const Color(0xffed202d)
-                                    : Colors.grey.shade300,
+                                        ? const Color(0xffed202d)
+                                        : Colors.grey.shade300,
                                   ),
-                              )),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -159,13 +169,22 @@ class _WelcomePageState extends State<WelcomePage> {
                           child: FilledButton(
                             style: FilledButton.styleFrom(
                               minimumSize: const Size(0, 52),
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 14,
+                              ),
                               backgroundColor: const Color(0xffed202d),
                               foregroundColor: Colors.white,
                               shape: const StadiumBorder(),
                             ),
                             onPressed: saving || !artworkReady ? null : next,
-                            child: Text(saving ? 'لحظة…' : index == 2 ? 'ابدأ الآن' : 'التالي'),
+                            child: Text(
+                              saving
+                                  ? 'لحظة…'
+                                  : index == 2
+                                  ? 'ابدأ الآن'
+                                  : 'التالي',
+                            ),
                           ),
                         ),
                       ],
@@ -189,7 +208,7 @@ class _RetainedWelcomePage extends StatefulWidget {
 }
 
 class _RetainedWelcomePageState extends State<_RetainedWelcomePage>
-with AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
   @override

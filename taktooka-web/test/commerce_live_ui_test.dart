@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +21,7 @@ import 'package:taktooka/pages/commerce_page.dart';
 import 'package:taktooka/pages/food_tracking_page.dart';
 import 'package:taktooka/widgets/street_map_layer.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart' as vector;
+
 import 'map_test_support.dart';
 
 class QaHttpOverrides extends HttpOverrides {
@@ -165,7 +167,7 @@ void main() {
     await capture(tester, 'registration-choices');
     await show(tester, CaptainRegistrationPage(backend: b));
     await waitText(tester, 'نظام النسبة');
-    expect(find.text('الاشتراك الأسبوعي — 5,000 دينار'), findsOneWidget);
+    expect(find.text('الاشتراك الأسبوعي'), findsOneWidget);
     await capture(tester, 'work-plans');
     await tester.pumpWidget(const SizedBox.shrink());
     b.dispose();
@@ -175,12 +177,12 @@ void main() {
   ) async {
     final b = await login(tester, 'restaurant');
     await show(tester, FoodPage(b: b));
-    await waitText(tester, 'إضافة صنف');
+    await waitText(tester, 'إضافة وجبة');
     expect(find.text('صنف تجريبي — ليس للبيع'), findsOneWidget);
     await capture(tester, 'restaurant-dashboard');
-    await tester.tap(find.text('الحسابات والتسديد'));
+    await tester.tap(find.text('الحسابات'));
     await tester.pump();
-    await waitText(tester, 'نسبة التطبيق المأخوذة من الزبائن والمخزونة لديك');
+    await waitText(tester, 'مستحقات تكتوكة');
     await capture(tester, 'restaurant-company-account');
     await tester.pumpWidget(const SizedBox.shrink());
     b.dispose();
@@ -188,10 +190,10 @@ void main() {
   testWidgets('live captain orders and company debt section', (tester) async {
     final b = await login(tester, 'commission');
     await show(tester, FoodPage(b: b));
-    await waitText(tester, 'استقبال طلبات التوصيل');
-    await tester.tap(find.text('الحسابات والتسديد'));
+    await waitText(tester, 'جاهز لاستقبال الطلبات');
+    await tester.tap(find.text('الحسابات'));
     await tester.pump();
-    await waitText(tester, 'أموال الشركة — يجب تسديدها');
+    await waitText(tester, 'مستحقات تكتوكة');
     await capture(tester, 'captain-company-account');
     await tester.pumpWidget(const SizedBox.shrink());
     b.dispose();
@@ -201,8 +203,8 @@ void main() {
   ) async {
     final b = await login(tester, 'customer');
     await show(tester, FoodPage(b: b));
-    await waitText(tester, 'الطلبات السابقة والحالية');
-    await tester.tap(find.text('الطلبات السابقة والحالية'));
+    await waitText(tester, 'طلباتي');
+    await tester.tap(find.text('طلباتي'));
     await tester.pump();
     await waitText(tester, 'إعادة الطلب — مراجعة الأسعار الحالية');
     await capture(tester, 'customer-order-history');

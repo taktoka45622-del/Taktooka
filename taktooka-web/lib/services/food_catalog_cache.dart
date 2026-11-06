@@ -48,7 +48,7 @@ class FoodCatalogCache extends ChangeNotifier {
   }
 
   String key(String action, Json data) =>
-      '${b.db.auth.currentUser?.id}:$action:${jsonEncode(data)}';
+      '${b.db.auth.currentUser?.id}:${b.cacheEpoch}:$action:${jsonEncode(data)}';
   void invalidate() {
     generation++;
     _values.clear();
@@ -61,18 +61,18 @@ class FoodCatalogCache extends ChangeNotifier {
     Future<dynamic> Function() request,
   ) async {
     final round = generation;
-    final name = '$generation:${key(action, data)}',
-        saved = _values[key(action, data)];
+    final requestKey = key(action, data);
+    final name = '$generation:$requestKey', saved = _values[requestKey];
     if (saved != null && DateTime.now().difference(saved.$1).inSeconds < 90)
       return jsonDecode(jsonEncode(saved.$2));
     final value = await (_pending[name] ??= request().whenComplete(() {
       _pending.remove(name);
     }));
-    if (round == generation)
-      _values[key(action, data)] = (
-        DateTime.now(),
-        jsonDecode(jsonEncode(value)),
-      );
-    return value;
+    if (round == generation && requestKey == key(action, data)) {
+      _values.remove(requestKey);
+      if (_values.length >= 50) _values.remove(_values.keys.first);
+      _values[requestKey] = (DateTime.now(), jsonDecode(jsonEncode(value)));
+    }
+    return jsonDecode(jsonEncode(value));
   }
 }

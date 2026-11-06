@@ -1,3 +1,5 @@
+import 'package:taktooka/services/page_snapshot_cache.dart';
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/core/design.dart' show money;
 import 'package:taktooka/services/food_contact.dart';
 
@@ -35,6 +37,11 @@ class _RestaurantCouriersPageState extends State<RestaurantCouriersPage> {
   void initState() {
     super.initState();
     enabled = widget.enabled;
+    final snapshot = PageSnapshotCache.read(widget.b, 'restaurant-couriers');
+    if (snapshot != null) {
+      couriers = Backend.rows(snapshot['rows']);
+      loading = false;
+    }
     load();
     timer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted &&
@@ -53,8 +60,11 @@ class _RestaurantCouriersPageState extends State<RestaurantCouriersPage> {
   Future<void> load() async {
     if (fetching || busy) return;
     fetching = true;
+    final session = widget.b.cacheEpoch;
     try {
       final rows = Backend.rows(await commerceRpc(widget.b, 'courier_list'));
+      if (!mounted || session != widget.b.cacheEpoch) return;
+      PageSnapshotCache.save(widget.b, 'restaurant-couriers', {'rows': rows});
       if (mounted)
         setState(() {
           couriers = rows;
@@ -351,9 +361,10 @@ class _RestaurantCouriersPageState extends State<RestaurantCouriersPage> {
                     : () => action(() async {
                         final value = Json.from(
                           await commerceRpc(widget.b, 'settlement_request', {
-                            'kind': 'captain_restaurant',
-                            'captain_id': c['user_id'],
-                          }) as Map,
+                                'kind': 'captain_restaurant',
+                                'captain_id': c['user_id'],
+                              })
+                              as Map,
                         );
                         if (mounted)
                           await showRestaurantSettlementCode(context, value);
@@ -396,13 +407,13 @@ class _RestaurantCouriersPageState extends State<RestaurantCouriersPage> {
       actions: [IconButton(onPressed: load, icon: const Icon(Icons.refresh))],
     ),
     body: loading
-        ? const Center(child: CircularProgressIndicator())
+        ? const SkeletonPage()
         : RefreshIndicator(
             onRefresh: load,
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                if (busy) const LinearProgressIndicator(),
+                if (busy) const SkeletonActivity(),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('استخدام مندوبين المطعم'),

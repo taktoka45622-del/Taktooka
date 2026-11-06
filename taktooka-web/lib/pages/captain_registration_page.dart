@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/services/upload_image.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 
@@ -243,14 +244,12 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
   });
   Future<void> next() async {
     await run(() async {
-      if (step == -1) {
-        application = await captainRegistration(b, 'save', fields());
-      } else if (step == 0) {
+      if (step == 0) {
         if (name.text.trim().split(RegExp(r'\s+')).length < 3)
           throw StateError('FULL_NAME_REQUIRED');
         if (province.text.trim().isEmpty || area.text.trim().isEmpty)
           throw StateError('AREA_REQUIRED');
-      } else if (documents[slots[step - 1]] == null)
+      } else if (step > 0 && documents[slots[step - 1]] == null)
         throw StateError('DOCUMENTS_REQUIRED');
       application = await captainRegistration(b, 'save', fields());
       if (mounted) setState(() => step++);
@@ -299,6 +298,10 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
           borderRadius: BorderRadius.circular(16),
           child: Image.network(
             previews[slot]!,
+            frameBuilder: (context, child, frame, synchronous) =>
+                synchronous || frame != null
+                ? child
+                : const SkeletonShimmer(child: SkeletonBlock(height: 220)),
             height: 220,
             fit: BoxFit.contain,
             errorBuilder: (_, __, ___) =>
@@ -416,7 +419,7 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
       ),
     ),
     body: loading
-        ? const Center(child: CircularProgressIndicator())
+        ? const SkeletonPage()
         : RefreshIndicator(
             onRefresh: () => load(),
             child: ListView(
@@ -431,7 +434,7 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
                     child: const AppText('إعادة المحاولة'),
                   ),
                 ],
-                if (busy) const LinearProgressIndicator(),
+                if (busy) const SkeletonActivity(),
                 if (locked) ...[
                   Icon(
                     application?['status'] == 'approved'

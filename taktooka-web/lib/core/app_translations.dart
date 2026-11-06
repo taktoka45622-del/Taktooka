@@ -317,7 +317,10 @@ const translatedCopy = <String, (String, String)>{
   "موقعك الحالي": ("Your current location", "شوێنی ئێستات"),
   "متابعة الكابتن": ("Follow captain", "بەدواداچوونی کاپتن"),
   "تحديد تطبيق الخرائط": ("Choose maps app", "هەڵبژاردنی ئەپی نەخشە"),
-  "اختيار تطبيق الخرائط المفضّل": ("Choose your preferred maps app", "هەڵبژاردنی ئەپی نەخشەی دڵخواز"),
+  "اختيار تطبيق الخرائط المفضّل": (
+    "Choose your preferred maps app",
+    "هەڵبژاردنی ئەپی نەخشەی دڵخواز",
+  ),
   "الملاحة للزبون": ("Navigate to customer", "ڕێنیشاندان بۆ کڕیار"),
   "الملاحة للوجهة": ("Navigate to destination", "ڕێنیشاندان بۆ مەبەست"),
   "الملاحة للرجعة": ("Navigate back", "ڕێنیشاندان بۆ گەڕانەوە"),

@@ -7,7 +7,6 @@ import 'backend.dart';
 import 'commerce.dart';
 import 'location_disclosure.dart';
 
-/// Restaurant-only tracking uses its own endpoint, never public taxi presence.
 class RestaurantCourierTracking extends ChangeNotifier {
   final Backend b;
   RestaurantCourierTracking(this.b);
@@ -143,7 +142,6 @@ class RestaurantCourierTracking extends ChangeNotifier {
     working = true;
     _notify();
     try {
-      // Finish the last location write before switching offline.
       try {
         await _sending;
       } catch (_) {}

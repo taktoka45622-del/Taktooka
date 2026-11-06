@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-const source=fs.readFileSync(new URL('../dashboard/coupon-rewards.js',import.meta.url),'utf8');
-const {createCouponRewards}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const {createCouponRewards}=await import('../dashboard/coupon-rewards.js');
 class Element {
  constructor(tag='div'){this.tag=tag;this.children=[];this.value='';this.hidden=false;this.disabled=false;this.isConnected=true;}
  set value(v){this._value=String(v);} get value(){return this._value;}
@@ -12,7 +11,7 @@ class Element {
  reset(){for(const id of ['rewardCode','rewardAmount'])elements[id].value='';elements.rewardType.value='amount';}
  click(){return this.onclick?.();}
 }
-const ids=['rewardType','rewardAmountField','rewardAmount','rewardExplanation','rewardForm','rewardCode','rewardUses','rewardActive','rewardExpiry','rewardList','rewardSearch','rewardSummary','newReward','refreshRewards'];
+const ids=['rewardType','rewardAmountField','rewardAmount','rewardExplanation','rewardForm','rewardCode','rewardUses','rewardActive','rewardExpiry','rewardList','rewardSearch','rewardSummary','newReward','newRewardPage','rewardEditor','refreshRewards'];
 const elements=Object.fromEntries(ids.map(id=>[id,new Element()]));
 const document={getElementById:id=>elements[id],createElement:tag=>new Element(tag)};
 const calls=[];let edit=true;let locked=false;let detail;

@@ -8,9 +8,15 @@ import 'package:taktooka/widgets/app_notice.dart';
 class MapNavigation {
   static const channel = MethodChannel('taktooka/map_navigation');
   static const androidNavigationApps = <String>{
-    'com.google.android.apps.maps', 'com.google.android.apps.mapslite',
-    'com.waze', 'com.here.app.maps', 'net.osmand', 'net.osmand.plus',
-    'app.organicmaps', 'com.mapswithme.maps.pro', 'com.sygic.aura',
+    'com.google.android.apps.maps',
+    'com.google.android.apps.mapslite',
+    'com.waze',
+    'com.here.app.maps',
+    'net.osmand',
+    'net.osmand.plus',
+    'app.organicmaps',
+    'com.mapswithme.maps.pro',
+    'com.sygic.aura',
   };
   static const preferenceKey = 'navigation_app_v1';
 
@@ -31,7 +37,8 @@ class MapNavigation {
     if (android) {
       final rows = await channel.invokeListMethod<dynamic>('apps');
       for (final row in rows ?? []) {
-        if (row is Map && androidNavigationApps.contains(row['id']) &&
+        if (row is Map &&
+            androidNavigationApps.contains(row['id']) &&
             row['name'] is String) {
           apps.add({'id': row['id'] as String, 'name': row['name'] as String});
         }

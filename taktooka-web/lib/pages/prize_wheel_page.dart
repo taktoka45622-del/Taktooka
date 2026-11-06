@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -196,7 +197,7 @@ class _PrizeWheelPageState extends State<PrizeWheelPage>
             ),
           ),
           const SizedBox(height: 18),
-          if (_loading) const LinearProgressIndicator(),
+          if (_loading) const SkeletonActivity(),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -217,10 +218,7 @@ class _PrizeWheelPageState extends State<PrizeWheelPage>
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
+                      child: SkeletonActivity(height: 16),
                     )
                   : const Icon(Icons.rotate_right),
               label: AppText(

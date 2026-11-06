@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -194,7 +195,7 @@ class _ConnectionScreenState extends State<ConnectionScreen>
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: SkeletonActivity(height: 16),
                             )
                           : const Icon(Icons.refresh_rounded),
                       label: AppText(
@@ -214,10 +215,7 @@ class _ConnectionScreenState extends State<ConnectionScreen>
                     ),
                     const SizedBox(height: 20),
                     const Center(
-                      child: SizedBox(
-                        width: 160,
-                        child: LinearProgressIndicator(color: scarlet),
-                      ),
+                      child: SizedBox(width: 160, child: SkeletonActivity()),
                     ),
                   ],
                 ],

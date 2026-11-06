@@ -33,10 +33,12 @@ void main() {
 
   test('platform check errors preserve the last network state', () async {
     var fail = false;
-    final monitor = ConnectionMonitor(probe: () async {
-      if (fail) throw StateError('platform unavailable');
-      return true;
-    });
+    final monitor = ConnectionMonitor(
+      probe: () async {
+        if (fail) throw StateError('platform unavailable');
+        return true;
+      },
+    );
     addTearDown(monitor.dispose);
     await monitor.check();
     fail = true;
@@ -45,7 +47,9 @@ void main() {
     expect(monitor.checking, isFalse);
   });
 
-  testWidgets('network events recover without waiting for polling', (tester) async {
+  testWidgets('network events recover without waiting for polling', (
+    tester,
+  ) async {
     final changes = StreamController<List<ConnectivityResult>>();
     var connected = false;
     final monitor = ConnectionMonitor(
@@ -71,7 +75,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(monitor.status, NetworkStatus.offline);
     monitor.dispose();
-    await changes.close();
+    await tester.runAsync(changes.close);
   });
 
   test('repeated retries share one request', () async {

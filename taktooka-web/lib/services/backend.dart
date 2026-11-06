@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'network_failure.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:taktooka/core/trip_navigation.dart';
@@ -51,7 +53,8 @@ String westernDigits(String value) => String.fromCharCodes(
 );
 
 class Backend extends ChangeNotifier {
-  final db = Supabase.instance.client;
+  final SupabaseClient db;
+  Backend({SupabaseClient? client}) : db = client ?? Supabase.instance.client;
   Future<void> Function()? beforeSignOut;
   Future<void> Function()? enableOrderNotifications;
   Future<void> Function(String)? silenceOffer;
@@ -62,6 +65,7 @@ class Backend extends ChangeNotifier {
   int _authEpoch = 0;
   bool _foreground = true, _heartbeatRunning = false;
   DateTime _nextPoll = DateTime(2000), _extrasAt = DateTime(2000);
+  DateTime _commerceAttemptAt = DateTime(2000);
   Object? _publishedSnapshot;
 
   void setForeground(bool foreground) {
@@ -174,6 +178,7 @@ class Backend extends ChangeNotifier {
   void _notifyIfChanged() {
     final value = [
       profile,
+      accountReady,
       commerce,
       rides,
       activeRide,
@@ -196,6 +201,8 @@ class Backend extends ChangeNotifier {
     }
   }
 
+  int get cacheEpoch => _authEpoch;
+  bool accountReady = false;
   Json? profile;
   Json extras = {};
   String city = 'بغداد';
@@ -463,6 +470,7 @@ class Backend extends ChangeNotifier {
         } else if (state.event == AuthChangeEvent.signedIn) {
           unawaited(appPreferences.rememberAccountUse());
           _authEpoch++;
+          accountReady = false;
           _extrasAt = DateTime(2000);
           _bindRealtime();
           unawaited(refresh());
@@ -524,17 +532,38 @@ class Backend extends ChangeNotifier {
         ? _read(extra('snapshot'))
         : Future.value((extras, null));
     try {
+      final loadCommerce =
+          !accountReady ||
+          full ||
+          DateTime.now().difference(_commerceAttemptAt).inSeconds >= 15;
+      if (loadCommerce) _commerceAttemptAt = DateTime.now();
       final primary = await Future.wait([
         _read(action('me')),
         _read(action('snapshot')),
         _read(dispatch('snapshot')),
-        _read(db.rpc('tkt_commerce', params: {'p_action': 'me', 'p_data': {}})),
+        loadCommerce
+            ? _read(
+                db
+                    .rpc(
+                      'tkt_commerce',
+                      params: {'p_action': 'me', 'p_data': {}},
+                    )
+                    .timeout(const Duration(seconds: 15)),
+              )
+            : Future.value((commerce, null)),
       ]);
       if (!current()) return;
       final oldCaptain = captain;
       if (primary[0].$2 != null) throw primary[0].$2!;
       profile = Json.from(primary[0].$1 as Map);
-      commerce = primary[3].$1 is Map ? Json.from(primary[3].$1 as Map) : {};
+      if (primary[3].$1 is Map) {
+        commerce = Json.from(primary[3].$1 as Map);
+      }
+      if (!accountReady) {
+        if (primary[3].$2 != null) throw primary[3].$2!;
+        if (primary[3].$1 is! Map) throw StateError('تعذّر تحديد نوع الحساب');
+      }
+      accountReady = true;
       if (captain && tracking) {
         stopRiderWarmup();
       } else {
@@ -595,11 +624,11 @@ class Backend extends ChangeNotifier {
       error = null;
       if (activeRide == null || activeRide!['status'] == 'pending')
         contact = null;
-      if (!captain || !tracking || activeRide != null) requests = [];
+      if (!ridesEnabled || !tracking || activeRide != null) requests = [];
       if (captain || activeRide != null) nearby = [];
       _notifyIfChanged();
       final details = await Future.wait<dynamic>([
-        captain && tracking && activeRide == null
+        ridesEnabled && tracking && activeRide == null
             ? action('requests')
             : Future.value([]),
         activeRide != null && activeRide!['status'] != 'pending'
@@ -1058,6 +1087,11 @@ class Backend extends ChangeNotifier {
       .whenComplete(() => _startingTracking = null);
 
   Future<void> _startTracking() async {
+    if (captain &&
+        !ridesEnabled &&
+        !foodEnabled &&
+        commerce['food_active'] != true)
+      throw Exception('SERVICES_PAUSED');
     if (tracking) return;
     if (!canReceiveOrders && commerce['food_active'] != true)
       throw Exception('جدّد حسابك عبر الدعم أولًا');
@@ -1189,7 +1223,9 @@ class Backend extends ChangeNotifier {
     _lastRiderPosition = null;
     _authEpoch++;
     profile = null;
+    accountReady = false;
     commerce = {};
+    _commerceAttemptAt = DateTime(2000);
     _sharedNavigation = null;
     accountGender.value = 'male';
     extras = {};
@@ -1253,6 +1289,7 @@ String readable(Object e) {
     return 'المنطقة المحددة خارج خدماتنا، سنصل قريبًا';
   }
   const errors = {
+    'SERVICES_PAUSED': 'فعّل الرحلات أو توصيل الطعام من اختيار الخدمات أولًا',
     'FEATURE_NOT_ENABLED': 'هذه الخدمة تحتاج تفعيل تحديث السيرفر',
     'INVALID_ADMIN_LOGIN': 'رقم الإدارة أو الرمز غير صحيح',
     'ADMIN_LOGIN_LOCKED': 'تم إيقاف المحاولات مؤقتًا؛ جرّب بعد 15 دقيقة',
@@ -1301,6 +1338,14 @@ String readable(Object e) {
   for (final item in errors.entries) {
     if (m.contains(item.key)) return item.value;
   }
-  if (m.startsWith('Exception:')) return m.substring(11);
-  return 'تعذر تنفيذ العملية. تأكد من الاتصال وحاول مجددًا';
+  final networkMessage = networkFailureMessage(e);
+  if (networkMessage != null) return networkMessage;
+  if (e is FormatException) return e.message;
+  if (e is LocationAccessException) return e.toString();
+  if (e is PostgrestException && e.code == '42501')
+    return 'ما عندك صلاحية لهذه العملية';
+  if (e is AuthException) return 'انتهت جلسة الدخول؛ سجّل دخولك مجددًا';
+  if (m.startsWith('Exception:') && RegExp(r'[\u0600-\u06FF]').hasMatch(m))
+    return m.substring(10).trim();
+  return 'تعذر تنفيذ العملية من الخدمة؛ أعد المحاولة أو تواصل مع الدعم';
 }

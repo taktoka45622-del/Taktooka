@@ -5,7 +5,7 @@ import 'package:taktooka/core/app_translations.dart';
 import 'package:taktooka/core/gender_copy.dart';
 
 const ink = Color(0xff111111),
-    scarlet = Color(0xffe01828),
+    scarlet = Color(0xffe7192d),
     pink = Color(0xffffedef),
     muted = Color(0xff777777);
 String money(dynamic value) =>

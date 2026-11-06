@@ -1,9 +1,6 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-const pdfSource=fs.readFileSync(new URL('../dashboard/coupon-card-pdf.js',import.meta.url),'utf8');
-const pdfUrl='data:text/javascript;base64,'+Buffer.from(pdfSource).toString('base64');
-const source=fs.readFileSync(new URL('../dashboard/coupon-card-printer.js',import.meta.url),'utf8').replace("'./coupon-card-pdf.js?v=1.6.66'",JSON.stringify(pdfUrl));
-const {createCouponCardPrinter,randomCardCode}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const {createCouponCardPrinter,randomCardCode}=await import('../dashboard/coupon-card-printer.js');
 const random=Array.from({length:1000},randomCardCode);assert.equal(new Set(random).size,1000);assert.ok(random.every(c=>/^[1-9][0-9]{9}$/.test(c)));
 class Element {constructor(){this.children=[];this.parentElement={};this._value='';}set value(v){this._value=String(v);}get value(){return this._value;}append(...nodes){this.children.push(...nodes);}replaceChildren(...nodes){this.children=nodes;}}
 const ids=['downloadCards','cardCount','cardOptions','rewardCode','rewardUses','rewardSave','cardPreviewCode','rewardExpiry','rewardActive','cardGenerated','cardBatches'];

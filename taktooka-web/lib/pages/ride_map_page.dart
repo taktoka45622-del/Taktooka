@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/widgets/booking_map_layer.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'package:taktooka/core/display_format.dart';
@@ -1760,7 +1761,7 @@ class _RideMapState extends State<RideMap>
             ),
           ],
         ),
-        if (quoting) const LinearProgressIndicator(),
+        if (quoting) const SkeletonActivity(),
         if (!quoting && quote == null)
           TextButton.icon(
             onPressed: calculate,
@@ -1791,8 +1792,9 @@ class _RideMapState extends State<RideMap>
                         b.coupon?['reward_type'] == 'free_ride'
                             ? 'رحلة مجانية واحدة'
                             : 'خصم ${money(((b.coupon!['amount'] as num).toInt()).clamp(0, (quote!['fare'] as num).toInt()))}',
-                        style: heading(16)
-                            .copyWith(color: const Color(0xff29994b)),
+                        style: heading(
+                          16,
+                        ).copyWith(color: const Color(0xff29994b)),
                       ),
                       AppText(
                         'رمز الخصم: ${b.coupon!['code']}',
@@ -2271,8 +2273,9 @@ class _RideMapState extends State<RideMap>
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface
-                                  .withValues(alpha: .85),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.surface.withValues(alpha: .85),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Column(

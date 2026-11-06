@@ -35,9 +35,13 @@ class OfflineRoads {
     await folder.create(recursive: true);
     final file = File('${folder.path}/${manifest['sha256']}.bin.gz');
     if (!await file.exists()) {
-      final asset = await rootBundle.load('assets/routing/iraq-roads-v2.bin.gz');
+      final asset = await rootBundle.load(
+        'assets/routing/iraq-roads-v2.bin.gz',
+      );
       final temporary = File('${file.path}.part');
-      await temporary.writeAsBytes(asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes));
+      await temporary.writeAsBytes(
+        asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes),
+      );
       await temporary.rename(file.path);
     }
     final ready = Completer<void>();

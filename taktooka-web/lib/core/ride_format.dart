@@ -5,7 +5,7 @@ import 'package:taktooka/core/design.dart';
 import 'package:taktooka/core/gender_copy.dart';
 import 'package:taktooka/services/backend.dart';
 
-const red = Color(0xffe01828), yellow = Color(0xffffca28);
+const red = Color(0xffe7192d), yellow = Color(0xffffca28);
 const labels = {
   'pending': 'جاري البحث عن كابتن قريب',
   'accepted': 'الكابتن بالطريق',

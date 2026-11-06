@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/services/upload_image.dart';
 import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/services/page_snapshot_cache.dart';
@@ -144,8 +145,9 @@ class _LinesPageState extends State<LinesPage> {
   }
 
   Future<void> register() async {
-    await Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => RegisterLinePage(b: widget.b)));
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => RegisterLinePage(b: widget.b)));
     if (mounted) await load();
   }
 
@@ -227,6 +229,7 @@ class _LinesPageState extends State<LinesPage> {
       const SizedBox(height: 16),
 
       if (error != null) AppText(error!),
+      if (loading && rows.isEmpty) const SkeletonContent(),
       if (!loading && rows.isEmpty) const AppText('ماكو خطوط حاليًا'),
     ];
     return Scaffold(
@@ -820,9 +823,9 @@ class _RegisterLinePageState extends State<RegisterLinePage> {
                   ),
                   validator: (v) {
                     final n = int.tryParse(
-                      westernDigits(v ?? '')
-                          .replaceAll(',', '')
-                          .replaceAll('٬', ''),
+                      westernDigits(
+                        v ?? '',
+                      ).replaceAll(',', '').replaceAll('٬', ''),
                     );
                     return n == null || n < 500 || n > 10000000
                         ? uiText('أدخل مبلغًا صحيحًا بالدينار')

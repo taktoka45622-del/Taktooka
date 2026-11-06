@@ -84,12 +84,13 @@ void main() {
           '{"status":"draft","documents":{},"full_name":"كرار نبيل علي","province":"بغداد","area":"القاهرة"}',
           200,
           headers: {'content-type': 'application/json'},
+          request: r,
         ),
       ),
     );
   });
   void action() {}
-  testWidgets(
+  mapLayoutTestWidgets(
     'Reference pages fit narrow and standard phones; wallet and coupon use live values',
     (tester) async {
       final oldShadows = debugDisableShadows;
@@ -353,6 +354,27 @@ void main() {
           if (entry.key == 'offers')
             expect(find.text('158935792'), findsOneWidget);
           if (entry.key == 'captain') {
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 100)),
+            );
+            await tester.pump();
+            expect(find.text('نظام العمل'), findsWidgets);
+            await tester.scrollUntilVisible(
+              find.text('التالي'),
+              250,
+              scrollable: find.byType(Scrollable).first,
+            );
+            await tester.tap(find.text('التالي'));
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 100)),
+            );
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 350));
+            await tester.scrollUntilVisible(
+              find.text('الاسم الكامل'),
+              -250,
+              scrollable: find.byType(Scrollable).first,
+            );
             expect(find.text('الاسم الكامل'), findsOneWidget);
             expect(find.text('المحافظة'), findsOneWidget);
             expect(find.text('المنطقة'), findsOneWidget);
@@ -388,56 +410,57 @@ void main() {
       debugDisableShadows = oldShadows;
     },
   );
-  testWidgets('Used coupon shows its ride and expired coupons show expiry', (
-    tester,
-  ) async {
-    final b = PreviewBackend();
-    const rideId = '00000000-0000-4000-8000-000000000123';
-    b.extras = {
-      'coupon_history': [
-        {
-          'code': 'USED1000',
-          'amount': 1000,
-          'status': 'used',
-          'expires_at': '2099-01-01T12:00:00Z',
-          'ride_id': rideId,
-        },
-        {
-          'code': 'OLD1000',
-          'amount': 1000,
-          'status': 'expired',
-          'expires_at': '2020-01-01T12:00:00Z',
-        },
-      ],
-    };
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: appTheme(),
-        home: Directionality(
-          textDirection: TextDirection.rtl,
-          child: Scaffold(
-            body: OffersPage(b: b, run: (fn) => fn(), login: () {}),
+  mapLayoutTestWidgets(
+    'Used coupon shows its ride and expired coupons show expiry',
+    (tester) async {
+      final b = PreviewBackend();
+      const rideId = '00000000-0000-4000-8000-000000000123';
+      b.extras = {
+        'coupon_history': [
+          {
+            'code': 'USED1000',
+            'amount': 1000,
+            'status': 'used',
+            'expires_at': '2099-01-01T12:00:00Z',
+            'ride_id': rideId,
+          },
+          {
+            'code': 'OLD1000',
+            'amount': 1000,
+            'status': 'expired',
+            'expires_at': '2020-01-01T12:00:00Z',
+          },
+        ],
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme(),
+          home: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Scaffold(
+              body: OffersPage(b: b, run: (fn) => fn(), login: () {}),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pump();
-    expect(find.text('مستخدم'), findsWidgets);
-    expect(find.textContaining('تاريخ الانتهاء:'), findsWidgets);
-    expect(find.text('حذف الكود'), findsNothing);
-    await tester.tap(find.text('كود الخصم').first);
-    await tester.pumpAndSettle();
-    expect(find.textContaining(rideId), findsOneWidget);
-    await tester.tap(find.text('إغلاق'));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('OLD1000'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('منتهي'), findsWidgets);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-    b.dispose();
-  });
+      );
+      await tester.pump();
+      expect(find.text('مستخدم'), findsWidgets);
+      expect(find.textContaining('تاريخ الانتهاء:'), findsWidgets);
+      expect(find.text('حذف الكود'), findsNothing);
+      await tester.tap(find.text('كود الخصم').first);
+      await tester.pumpAndSettle();
+      expect(find.textContaining(rideId), findsOneWidget);
+      await tester.tap(find.text('إغلاق'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('OLD1000'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('منتهي'), findsWidgets);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      b.dispose();
+    },
+  );
 }

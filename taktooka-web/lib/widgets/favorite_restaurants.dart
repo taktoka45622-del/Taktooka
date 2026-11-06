@@ -1,3 +1,4 @@
+import 'persistent_media_image.dart';
 import 'package:taktooka/services/restaurant_range.dart';
 import 'package:taktooka/services/media_url.dart';
 import 'package:flutter/material.dart';
@@ -204,7 +205,7 @@ class _HomeFavoriteRestaurantsState extends State<HomeFavoriteRestaurants> {
           await widget.open(r);
           await refresh();
         },
-        photo: (path, {double height = 80}) => Image.network(
+        photo: (path, {double height = 80}) => PersistentMediaImage(
           mediaUrl(supabaseUrl, 'restaurant-images', '$path'),
           height: height,
           width: height,

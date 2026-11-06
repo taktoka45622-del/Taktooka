@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/services/map_navigation.dart';
 import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/core/route_visibility.dart';
@@ -354,9 +355,7 @@ class _LineDetailPageState extends State<LineDetailPage> {
       return Scaffold(
         appBar: AppBar(title: const AppText('تفاصيل الخط')),
         body: Center(
-          child: error == null
-              ? const Icon(Icons.route, size: 48, color: muted)
-              : AppText(error!),
+          child: error == null ? const SkeletonPage() : AppText(error!),
         ),
       );
     final uid = widget.b.db.auth.currentUser?.id;

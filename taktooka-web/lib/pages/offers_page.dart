@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'package:taktooka/core/display_format.dart';
@@ -120,7 +121,7 @@ class _OffersPageState extends State<OffersPage> {
             ),
           ],
         ),
-        if (busy) const LinearProgressIndicator(),
+        if (busy) const SkeletonActivity(),
         if (error != null)
           Padding(
             padding: const EdgeInsets.all(12),

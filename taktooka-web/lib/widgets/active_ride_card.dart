@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:flutter/material.dart';
 import 'package:taktooka/services/map_navigation.dart';
 
@@ -295,10 +296,7 @@ class ActiveRideCard extends StatelessWidget {
                           ? const SizedBox(
                               width: 22,
                               height: 22,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2.5,
-                              ),
+                              child: SkeletonActivity(height: 16),
                             )
                           : const Icon(
                               Icons.health_and_safety_outlined,

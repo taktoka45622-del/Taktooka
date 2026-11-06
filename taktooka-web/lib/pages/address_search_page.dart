@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'dart:async';
@@ -422,7 +423,7 @@ class _AddressSearchState extends State<AddressSearch> {
         ),
     ];
     final searchItems = <Widget>[
-      if (_locating) const LinearProgressIndicator(),
+      if (_locating) const SkeletonActivity(),
       if (_locationError != null)
         TextButton(
           onPressed: prepareSearchLocation,
@@ -477,10 +478,7 @@ class _AddressSearchState extends State<AddressSearch> {
               : const Duration(milliseconds: 120),
           child: TickerMode(
             enabled: busy && !MediaQuery.disableAnimationsOf(context),
-            child: LinearProgressIndicator(
-              minHeight: 2,
-              value: MediaQuery.disableAnimationsOf(context) ? .7 : null,
-            ),
+            child: SkeletonActivity(height: 2),
           ),
         ),
       ),

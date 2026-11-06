@@ -1,0 +1,12 @@
+.page[data-initial-loading] {position:relative;min-height:480px}
+.page[data-initial-loading] > :not(.tkt-skeleton) {visibility:hidden}
+.tkt-skeleton {position:absolute;inset:0;overflow:hidden;padding:20px;background:var(--surface,#fff);border-radius:16px;pointer-events:auto}
+.tkt-skeleton-card {display:flex;gap:18px;align-items:center;margin:0 0 24px}
+.tkt-skeleton-card > div {flex:1;display:grid;gap:12px}
+.tkt-skeleton span {display:block;height:16px;border-radius:8px;background:linear-gradient(100deg,#e7e8eb 35%,#fafafa 50%,#e7e8eb 65%);background-size:1000px 100%;background-attachment:fixed;animation:tkt-shimmer 1.5s linear infinite}
+.tkt-skeleton .tkt-skeleton-image {width:76px;height:76px;border-radius:16px;flex:none}
+.tkt-skeleton-card > div span:first-child {width:60%}
+.tkt-skeleton-card > div span:last-child {width:35%;height:12px}
+ .page[hidden] .tkt-skeleton span {animation-play-state:paused}
+@keyframes tkt-shimmer {from {background-position:1000px 0} to {background-position:-1000px 0}}
+@media(prefers-reduced-motion:reduce) {.tkt-skeleton span {animation:none;background:#e7e8eb}}

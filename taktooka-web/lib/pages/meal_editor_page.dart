@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/widgets/persistent_media_image.dart';
 import 'package:taktooka/services/media_url.dart';
 import 'package:taktooka/widgets/food_options_editor.dart';
@@ -307,7 +308,7 @@ class _MealEditorPageState extends State<MealEditorPage> {
                       child: OutlinedButton(
                         onPressed: uploading || saving ? null : addImages,
                         child: uploading
-                            ? const CircularProgressIndicator()
+                            ? const SkeletonActivity(height: 16)
                             : const Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [Icon(Icons.add), Text('إضافة صور')],
@@ -446,7 +447,7 @@ class _MealEditorPageState extends State<MealEditorPage> {
             ),
             const SizedBox(height: 18),
             field('وصف الوجبة', description, lines: 2),
-            if (optionsLoading) const LinearProgressIndicator(),
+            if (optionsLoading) const SkeletonActivity(),
             if (optionsError != null)
               TextButton.icon(
                 onPressed: optionsLoading ? null : loadCategoryOptions,

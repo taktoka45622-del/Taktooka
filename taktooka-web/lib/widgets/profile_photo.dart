@@ -1,3 +1,4 @@
+import 'skeleton.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ class ProfilePhoto extends StatefulWidget {
 }
 
 class _ProfilePhotoState extends State<ProfilePhoto> {
+  static final Map<String, (DateTime, Future<String>)> signed = {};
   Future<String>? image;
   Timer? refresh;
   @override
@@ -37,15 +39,43 @@ class _ProfilePhotoState extends State<ProfilePhoto> {
   void load() {
     refresh?.cancel();
     final path = widget.path;
-    image = path == null || path.isEmpty
-        ? null
-        : Supabase.instance.client.storage
-              .from('profile-photos')
-              .createSignedUrl(path, 1800);
-    if (image != null)
-      refresh = Timer(const Duration(minutes: 25), () {
-        if (mounted) setState(load);
-      });
+    if (path == null || path.isEmpty) {
+      image = null;
+    } else {
+      final client = Supabase.instance.client;
+      final key = '${client.auth.currentUser?.id}:$path';
+      final saved = signed[key];
+      if (saved != null && DateTime.now().difference(saved.$1).inMinutes < 24) {
+        image = saved.$2;
+      } else {
+        final request = client.storage
+            .from('profile-photos')
+            .createSignedUrl(path, 1800);
+        if (signed.length >= 100) signed.remove(signed.keys.first);
+        signed[key] = (DateTime.now(), request);
+        image = request;
+        unawaited(
+          request.then<void>(
+            (_) {},
+            onError: (Object _) {
+              if (identical(signed[key]?.$2, request)) signed.remove(key);
+            },
+          ),
+        );
+      }
+    }
+    if (image != null) {
+      final key = '${Supabase.instance.client.auth.currentUser?.id}:$path';
+      final savedAt = signed[key]?.$1 ?? DateTime.now();
+      final remaining =
+          const Duration(minutes: 24) - DateTime.now().difference(savedAt);
+      refresh = Timer(
+        remaining.isNegative ? const Duration(seconds: 1) : remaining,
+        () {
+          if (mounted) setState(load);
+        },
+      );
+    }
   }
 
   @override
@@ -65,10 +95,29 @@ class _ProfilePhotoState extends State<ProfilePhoto> {
         child: FutureBuilder<String>(
           future: image,
           builder: (context, snapshot) {
-            if (!snapshot.hasData) return fallback;
+            if (snapshot.hasError) return fallback;
+            if (!snapshot.hasData)
+              return SkeletonShimmer(
+                child: SkeletonBlock(
+                  height: widget.size,
+                  width: widget.size,
+                  radius: widget.size / 2,
+                ),
+              );
             return Image.network(
               snapshot.data!,
               fit: BoxFit.cover,
+              gaplessPlayback: true,
+              frameBuilder: (context, child, frame, synchronous) =>
+                  synchronous || frame != null
+                  ? child
+                  : SkeletonShimmer(
+                      child: SkeletonBlock(
+                        height: widget.size,
+                        width: widget.size,
+                        radius: widget.size / 2,
+                      ),
+                    ),
               errorBuilder: (_, error, stack) => fallback,
             );
           },

@@ -1,6 +1,6 @@
+import 'skeleton.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:crypto/crypto.dart';
@@ -111,6 +111,12 @@ class PersistentMediaImage extends StatelessWidget {
     fit: fit,
     gaplessPlayback: true,
     semanticLabel: semanticLabel,
+    frameBuilder: (context, child, frame, synchronous) =>
+        synchronous || frame != null
+        ? child
+        : SkeletonShimmer(
+            child: SkeletonBlock(height: height ?? 80, width: width),
+          ),
     errorBuilder: errorBuilder,
     loadingBuilder: loadingBuilder,
   );

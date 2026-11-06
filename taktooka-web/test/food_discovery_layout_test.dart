@@ -11,18 +11,27 @@ import 'package:taktooka/services/restaurant_range.dart';
 import 'package:taktooka/widgets/food_discovery.dart';
 
 void main() {
-  test('closing deadline works across midnight and a closed restaurant stays closed', () {
-    final restaurant = {'open': true, 'closing_at': '2026-11-02T00:00:00Z'};
-    expect(
-      restaurantIsOpen(restaurant, now: DateTime.parse('2026-11-01T23:59:59Z')),
-      true,
-    );
-    expect(
-      restaurantIsOpen(restaurant, now: DateTime.parse('2026-11-02T00:00:00Z')),
-      false,
-    );
-    expect(restaurantIsOpen({'open': false}), false);
-  });
+  test(
+    'closing deadline works across midnight and a closed restaurant stays closed',
+    () {
+      final restaurant = {'open': true, 'closing_at': '2026-11-02T00:00:00Z'};
+      expect(
+        restaurantIsOpen(
+          restaurant,
+          now: DateTime.parse('2026-11-01T23:59:59Z'),
+        ),
+        true,
+      );
+      expect(
+        restaurantIsOpen(
+          restaurant,
+          now: DateTime.parse('2026-11-02T00:00:00Z'),
+        ),
+        false,
+      );
+      expect(restaurantIsOpen({'open': false}), false);
+    },
+  );
   test('WhatsApp includes numeric order, all parties and amounts', () {
     final uri = foodWhatsAppUri(
       '07701234567',

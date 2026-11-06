@@ -8,8 +8,9 @@ function* buildPdfSteps({codes,jpeg,width=1536,height=864}) {
  add([ascii(`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`),jpeg,ascii('\nendstream')]);
  add(ascii('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'));
  let page=0;for(const code of codes){
-  const fontSize=64*scale,x=1129*scale-code.length*0.556*fontSize/2,y=(height-686)*scale-fontSize*0.359;
-  const commands=`q ${pageWidth.toFixed(4)} 0 0 ${pageHeight.toFixed(4)} 0 0 cm /Template Do Q\nBT /Code ${fontSize.toFixed(4)} Tf 0.30 0.025 0.025 rg 1 0 0 1 ${x.toFixed(4)} ${y.toFixed(4)} Tm (${code}) Tj ET\n`;
+  const fontSize=width*0.04167*scale,x=width*0.73385*scale-code.length*0.556*fontSize/2,y=height*0.207*scale-fontSize*0.359;
+  const serial=String(page+1),serialFontSize=width*0.028*scale,serialX=width*0.0945*scale-serial.length*0.556*serialFontSize/2,serialY=height*0.883*scale-serialFontSize*0.359;
+  const commands=`q ${pageWidth.toFixed(4)} 0 0 ${pageHeight.toFixed(4)} 0 0 cm /Template Do Q\nBT /Code ${fontSize.toFixed(4)} Tf 0.30 0.025 0.025 rg 1 0 0 1 ${x.toFixed(4)} ${y.toFixed(4)} Tm (${code}) Tj ET\nBT /Code ${serialFontSize.toFixed(4)} Tf 0.15 0.06 0.015 rg 1 0 0 1 ${serialX.toFixed(4)} ${serialY.toFixed(4)} Tm (${serial}) Tj ET\n`;
   const streamId=objects.length+1;
   add(ascii(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth.toFixed(4)} ${pageHeight.toFixed(4)}] /Resources << /XObject << /Template 3 0 R >> /Font << /Code 4 0 R >> >> /Contents ${streamId} 0 R >>`));
   add(ascii(`<< /Length ${ascii(commands).length} >>\nstream\n${commands}endstream`));if(++page%500===0)yield {page,total:codes.length};
@@ -27,7 +28,7 @@ export async function buildCouponCardsPdfAsync(options){const steps=buildPdfStep
 let templatePromise;
 export async function loadCouponTemplate() {
  if(templatePromise)return templatePromise;
- templatePromise=(async()=>{const img=new Image();img.src=new URL('./assets/free-ride-card.png',import.meta.url).href;await img.decode();const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;const context=canvas.getContext('2d');if(!context)throw new Error('تعذّر تجهيز صورة الكارت');context.drawImage(img,0,0);const raw=atob(canvas.toDataURL('image/jpeg',0.96).split(',')[1]);return {jpeg:Uint8Array.from(raw,c=>c.charCodeAt(0)),width:canvas.width,height:canvas.height};})().catch(error=>{templatePromise=null;throw error;});
+ templatePromise=(async()=>{const img=new Image();img.src=new URL('./assets/free-ride-card.png?v=1.6.68',import.meta.url).href;await img.decode();const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;const context=canvas.getContext('2d');if(!context)throw new Error('تعذّر تجهيز صورة الكارت');context.drawImage(img,0,0);const raw=atob(canvas.toDataURL('image/jpeg',0.96).split(',')[1]);return {jpeg:Uint8Array.from(raw,c=>c.charCodeAt(0)),width:canvas.width,height:canvas.height};})().catch(error=>{templatePromise=null;throw error;});
  return templatePromise;
 }
 

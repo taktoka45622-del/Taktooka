@@ -335,8 +335,10 @@ void main() {
         supportedLocales: const [Locale('ar')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: TextScaler.linear(scale)),
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            disableAnimations: true,
+          ),
           child: Directionality(
             textDirection: TextDirection.rtl,
             child: GenderScope(
@@ -1278,8 +1280,9 @@ void main() {
                 .toImage(pixelRatio: 2);
         final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
         Directory('verification/responsive').createSync(recursive: true);
-        File('verification/responsive/${sample.$1}.png')
-            .writeAsBytesSync(bytes!.buffer.asUint8List());
+        File(
+          'verification/responsive/${sample.$1}.png',
+        ).writeAsBytesSync(bytes!.buffer.asUint8List());
         image.dispose();
       });
       await tester.pump(const Duration(seconds: 15));

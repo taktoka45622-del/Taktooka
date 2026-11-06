@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
@@ -52,7 +53,7 @@ class _CityPageState extends State<CityPage> {
             ? const SizedBox(
                 width: 22,
                 height: 22,
-                child: CircularProgressIndicator(),
+                child: SkeletonActivity(height: 20),
               )
             : const Icon(Icons.my_location),
         title: const AppText('موقعك الحالي'),

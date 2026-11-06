@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'food_price_filter.dart';
 
 import 'dart:async';
@@ -485,9 +486,9 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
         ? <Json>[]
         : widget.restaurants
               .where(
-                (r) =>
-                    normalize('${r['name']} ${r['description'] ?? ''}')
-                        .contains(normalize(query.trim())),
+                (r) => normalize(
+                  '${r['name']} ${r['description'] ?? ''}',
+                ).contains(normalize(query.trim())),
               )
               .toList();
     if (priceRange != null)
@@ -706,11 +707,13 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
               ],
             ),
           ),
-          if (loading) const LinearProgressIndicator(minHeight: 2),
+          if (loading) const SkeletonActivity(height: 2),
           if (error != null)
             TextButton(onPressed: () => fetch(query), child: Text(error!)),
           Expanded(
-            child: count == 0
+            child: loading && count == 0
+                ? const SkeletonPage()
+                : count == 0
                 ? const Center(child: Text('ماكو وجبات مطابقة للبحث'))
                 : ListView(
                     padding: const EdgeInsets.symmetric(horizontal: 16),

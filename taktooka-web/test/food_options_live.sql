@@ -1,0 +1,33 @@
+begin;
+do $$
+declare owner_id uuid:=gen_random_uuid();customer_id uuid:=gen_random_uuid();courier_id uuid:=gen_random_uuid();other_id uuid:=gen_random_uuid();restaurant_id uuid:=gen_random_uuid();other_restaurant uuid:=gen_random_uuid();meal_id uuid:=gen_random_uuid();other_meal uuid:=gen_random_uuid();quote_id uuid:=gen_random_uuid();o jsonb;config jsonb;fee int;denied boolean;photo text;request_id uuid:=gen_random_uuid();input jsonb;
+begin
+ insert into auth.users(id,aud,role,email,raw_user_meta_data,raw_app_meta_data,created_at,updated_at)select id,'authenticated','authenticated',id||'@food-options-test.invalid','{}','{}',now(),now()from unnest(array[owner_id,customer_id,courier_id,other_id])id;
+ insert into public.tkt_profiles(user_id,name,phone,captain)values(owner_id,'صاحب مطعم إضافات','07000000981',false),(customer_id,'زبون إضافات','07000000982',false),(courier_id,'مندوب إضافات','07000000983',true),(other_id,'مطعم آخر','07000000984',false);
+ insert into tkt_private.restaurants(id,owner_id,name,phone,address,location,open)values(restaurant_id,owner_id,'مطعم إضافات تجريبي','07000000981','عنوان اختبار','[33.55,44.42]',true),(other_restaurant,other_id,'مطعم آخر تجريبي','07000000984','عنوان اختبار','[33.55,44.42]',true);
+ photo:=owner_id||'/test-extra.jpg';insert into storage.objects(bucket_id,name)values('restaurant-images',photo);
+ perform set_config('request.jwt.claim.sub',owner_id::text,true);
+ config:=jsonb_build_object('sizes',jsonb_build_array(jsonb_build_object('id','normal','name','عادي','price',6000),jsonb_build_object('id','double','name','دبل','price',8000)),'addons',jsonb_build_array(jsonb_build_object('id','cheese','name','جبن','price',1000,'image_path',photo)));
+ o:=public.tkt_commerce('item_save',jsonb_build_object('id',meal_id,'name','بركر تجريبي','price',6000,'category','بركر','image_paths',jsonb_build_array(photo),'options',config,'save_category_addons',true));
+ if o->'options'->'addons'->0->>'image_path'<>photo then raise exception 'OPTION_IMAGE_MISSING';end if;
+ if jsonb_array_length(public.tkt_commerce('category_options','{"category":"بركر"}')->'addons')<>1 or jsonb_array_length(public.tkt_commerce('category_options','{"category":"بيتزا"}')->'addons')<>0 then raise exception 'TEMPLATE_ISOLATION';end if;
+ perform set_config('request.jwt.claim.sub',customer_id::text,true);
+ perform public.tkt_commerce('favorite_set',jsonb_build_object('restaurant_id',restaurant_id,'saved',true));perform public.tkt_commerce('favorite_set',jsonb_build_object('restaurant_id',restaurant_id,'saved',true));if jsonb_array_length(public.tkt_commerce('favorites','{}'))<>1 then raise exception 'FAVORITE_IDEMPOTENCY';end if;
+ perform set_config('request.jwt.claim.sub',other_id::text,true);if jsonb_array_length(public.tkt_commerce('favorites','{}'))<>0 then raise exception 'FAVORITE_LEAK';end if;
+ perform set_config('request.jwt.claim.sub',customer_id::text,true);denied:=false;begin perform public.tkt_commerce('category_options_save','{"category":"بركر","addons":[]}');exception when others then if sqlerrm<>'PERMISSION_DENIED' then raise;end if;denied:=true;end;if not denied then raise exception 'TEMPLATE_ACCESS';end if;
+ insert into tkt_private.restaurant_items(id,restaurant_id,name,price,image_path)values(other_meal,other_restaurant,'وجبة أخرى',1000,'');
+ insert into public.tkt_quotes(id,user_id,pickup,destination,geometry,distance_m,duration_s,fare)values(quote_id,customer_id,'[33.55,44.42]','[33.56,44.43]','{"type":"LineString","coordinates":[[44.42,33.55],[44.43,33.56]]}',1000,300,1500);
+ select service_fee into fee from tkt_private.commerce_settings where id;
+ input:=jsonb_build_object('request_id',request_id,'restaurant_id',restaurant_id,'quote_id',quote_id,'customer_address','عنوان زبون الاختبار','expected_service_fee',fee,'expected_delivery_fee',1500,'expected_food_total',18000,'items',jsonb_build_array(jsonb_build_object('id',meal_id,'quantity',2,'size_id','double','addon_ids',jsonb_build_array('cheese'),'notes','بدون بصل','price',1)));
+ denied:=false;begin perform public.tkt_commerce('order_create',input||jsonb_build_object('items',(input->'items')||jsonb_build_array(jsonb_build_object('id',other_meal,'quantity',1))));exception when others then if sqlerrm<>'ITEM_UNAVAILABLE' then raise;end if;denied:=true;end;if not denied then raise exception 'MIXED_RESTAURANTS';end if;
+ o:=public.tkt_commerce('order_create',input);if (o->>'food_total')::int<>18000 or(o->'items'->0->>'price')::int<>9000 or o->'items'->0->'addons'->0->>'image_path'<>photo then raise exception 'EXTRA_PRICE_OR_SNAPSHOT';end if;
+ if public.tkt_commerce('order_details',jsonb_build_object('id',o->>'id'))->'items'->0->>'notes'<>'بدون بصل' then raise exception 'CUSTOMER_DETAILS';end if;
+ perform set_config('request.jwt.claim.sub',owner_id::text,true);if public.tkt_commerce('order_details',jsonb_build_object('id',o->>'id'))->'items'->0->'addons'->0->>'name'<>'جبن' then raise exception 'RESTAURANT_DETAILS';end if;
+ update tkt_private.food_orders set captain_id=courier_id where id=(o->>'id')::uuid;
+ perform set_config('request.jwt.claim.sub',courier_id::text,true);if public.tkt_commerce('order_details',jsonb_build_object('id',o->>'id'))->'items'->0->>'image_path'<>photo then raise exception 'COURIER_DETAILS';end if;
+ perform set_config('request.jwt.claim.sub',owner_id::text,true);perform public.tkt_commerce('item_save',jsonb_build_object('id',meal_id,'name','بركر معدل','price',7000,'image_paths',jsonb_build_array(photo),'options','{"sizes":[],"addons":[]}'::jsonb));
+ perform set_config('request.jwt.claim.sub',customer_id::text,true);if public.tkt_commerce('order_details',jsonb_build_object('id',o->>'id'))->'items'->0->'addons'->0->>'name'<>'جبن' then raise exception 'HISTORICAL_ORDER_CHANGED';end if;
+ perform public.tkt_commerce('favorite_set',jsonb_build_object('restaurant_id',restaurant_id,'saved',false));if jsonb_array_length(public.tkt_commerce('favorites','{}'))<>0 then raise exception 'FAVORITE_DELETE';end if;
+end $$;
+rollback;
+select 'PASS live favorites isolation/idempotency/removal; category templates; image ownership; mixed-restaurant rejection; per-quantity addon pricing; customer/owner/courier image/option snapshots; history retained. Rolled back.' as result;

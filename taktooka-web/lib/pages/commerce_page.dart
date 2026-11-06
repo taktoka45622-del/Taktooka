@@ -1,3 +1,5 @@
+import 'package:taktooka/services/page_snapshot_cache.dart';
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/services/food_catalog_cache.dart';
 import 'package:taktooka/services/food_contact.dart';
 import 'package:taktooka/services/restaurant_availability.dart';
@@ -73,7 +75,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   LocalHistoryEntry? restaurantEntry;
   final List<LocalHistoryEntry> foodHistory = [];
   final cart = FoodCart();
-  final foodScroll = ScrollController();
+  final foodScroll = ScrollController(keepScrollOffset: true);
   late final FoodCatalogCache catalogCache;
   void catalogChanged() {
     if (mounted && !busy) unawaited(load(silent: true));
@@ -125,6 +127,29 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
             )
         ? widget.initialRestaurant
         : null;
+    if (b.restaurantOwner) selected = Json.from(me['restaurant'] as Map);
+    final snapshot = PageSnapshotCache.read(
+      b,
+      'food-page:${selected?['id'] ?? "browse"}',
+    );
+    if (snapshot != null &&
+        snapshot['generation'] == catalogCache.generation &&
+        snapshot['role'] ==
+            '${b.captain}:${b.restaurantOwner}:${b.commerce['self_courier'] is Map}' &&
+        sameSnapshot(
+          snapshot['area'],
+          widget.initialArea ??
+              (point == null ? null : [point.latitude, point.longitude]),
+        )) {
+      shops = Backend.rows(snapshot['shops']);
+      menu = Backend.rows(snapshot['menu']);
+      catalog = Backend.rows(snapshot['catalog']);
+      orders = Backend.rows(snapshot['orders']);
+      _restaurantArea ??= (snapshot['area'] as List?)
+          ?.map((e) => (e as num).toDouble())
+          .toList();
+      loading = false;
+    }
     favorites = favoritesFor(b)..addListener(_favoritesChanged);
     if (!b.captain &&
         b.commerce['restaurant'] == null &&
@@ -186,13 +211,15 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   Future<void> _loadOnce({bool silent = false}) async {
     if (busy || !mounted) return;
     final revision = _dataRevision;
+    final session = b.cacheEpoch;
     try {
       final values = await Future.wait([
         commerceRpc(b, 'me'),
         commerceRpc(b, 'orders'),
         tab == 2 ? commerceRpc(b, 'accounts') : Future.value(accounts),
       ]);
-      if (!mounted || revision != _dataRevision) return;
+      if (!mounted || revision != _dataRevision || session != b.cacheEpoch)
+        return;
       final nextMe = Json.from(values[0] as Map);
       final nextRestaurant = nextMe['restaurant'] is Map
           ? Json.from(nextMe['restaurant'])
@@ -249,7 +276,8 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
           }),
         );
       }
-      if (!mounted || revision != _dataRevision) return;
+      if (!mounted || revision != _dataRevision || session != b.cacheEpoch)
+        return;
       setState(() {
         me = nextMe;
         orders = Backend.rows(values[1]);
@@ -269,6 +297,21 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
         loading = false;
         error = null;
       });
+      if (foodSearch.isEmpty &&
+          cuisine.isEmpty &&
+          !offersOnly &&
+          minFoodPrice == 0 &&
+          maxFoodPrice == 1000000)
+        PageSnapshotCache.save(b, 'food-page:${selected?['id'] ?? "browse"}', {
+          'generation': catalogCache.generation,
+          'role':
+              '${b.captain}:${b.restaurantOwner}:${b.commerce['self_courier'] is Map}',
+          'shops': shops,
+          'menu': menu,
+          'catalog': catalog,
+          'orders': orders,
+          'area': _restaurantArea,
+        });
       if (privateCourier &&
           (nextMe['self_courier'] as Map?)?['active'] == false &&
           privateTracking.online)
@@ -320,8 +363,8 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     await load();
   }
 
-  Future<AddressChoice?> location(String title) => Navigator.of(context)
-      .push<AddressChoice>(
+  Future<AddressChoice?> location(String title) =>
+      Navigator.of(context).push<AddressChoice>(
         MaterialPageRoute(
           builder: (_) => FavoritePlacePicker(b: b, title: title),
         ),
@@ -1347,7 +1390,8 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                           if (matches.isEmpty) {
                             if (mounted)
                               setState(
-                                () => error = 'المطعم مغلق حالياً أو غير متاح؛ جرّب لاحقاً',
+                                () => error =
+                                    'المطعم مغلق حالياً أو غير متاح؛ جرّب لاحقاً',
                               );
                             return;
                           }
@@ -1507,9 +1551,10 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                           : () => run(() async {
                               final value = Json.from(
                                 await commerceRpc(b, 'settlement_request', {
-                                  'kind': 'captain_restaurant',
-                                  'captain_id': g.key,
-                                }) as Map,
+                                      'kind': 'captain_restaurant',
+                                      'captain_id': g.key,
+                                    })
+                                    as Map,
                               );
                               if (!mounted) return;
                               await showRestaurantSettlementCode(
@@ -1543,14 +1588,11 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                               );
                               if (code == null) return;
                               await run(() async {
-                                final result = await commerceRpc(
-                                  b,
-                                  'settlement_confirm',
-                                  {
-                                    'id': pending.first['id'],
-                                    'code': westernDigits(code),
-                                  },
-                                );
+                                final result =
+                                    await commerceRpc(b, 'settlement_confirm', {
+                                      'id': pending.first['id'],
+                                      'code': westernDigits(code),
+                                    });
                                 if (result['ok'] != true)
                                   throw StateError(result['error']);
                               });
@@ -1706,17 +1748,18 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
           )
         : null,
     body: loading
-        ? const Center(child: CircularProgressIndicator())
+        ? const SkeletonPage()
         : RefreshIndicator(
             onRefresh: load,
             child: CustomScrollView(
+              key: const PageStorageKey('food-page-scroll'),
               controller: foodScroll,
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverToBoxAdapter(
                   child: Column(
                     children: [
-                      if (busy) const LinearProgressIndicator(),
+                      if (busy) const SkeletonActivity(),
                       if (privateCourier) ...[
                         SwitchListTile(
                           title: const Text('استقبال طلبات مطعمي'),

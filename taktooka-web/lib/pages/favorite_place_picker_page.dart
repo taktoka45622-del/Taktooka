@@ -434,9 +434,9 @@ class _FavoritePlacePickerState extends State<FavoritePlacePicker>
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  tileColor: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest,
+                  tileColor: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest,
                   leading: Icon(
                     Icons.location_on,
                     color: widget.origin ? const Color(0xffe56516) : brandRed,

@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/services/food_contact.dart';
 import 'package:taktooka/widgets/persistent_media_image.dart';
 
@@ -52,8 +53,9 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
   int get secondsLeft {
     final expires =
         DateTime.tryParse('${order['courier_offer_expires_at'] ?? ''}') ??
-        DateTime.tryParse('${order['updated_at'] ?? ''}')
-            ?.add(const Duration(minutes: 2));
+        DateTime.tryParse(
+          '${order['updated_at'] ?? ''}',
+        )?.add(const Duration(minutes: 2));
     return expires == null
         ? 0
         : expires.difference(widget.b.serverNow).inSeconds.clamp(0, 120);
@@ -316,7 +318,7 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          if (loading || busy) const LinearProgressIndicator(),
+          if (loading || busy) const SkeletonActivity(),
           if (!isCourier && !widget.b.restaurantOwner) customerTimeline(),
           Card(
             child: Padding(

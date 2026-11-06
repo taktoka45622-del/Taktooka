@@ -72,9 +72,9 @@ class ProfileHub extends StatelessWidget {
       ),
       if (b.captain) ...[
         PaperCard(
-          onTap: () =>
-              Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (_) => FoodPage(b: b))),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => FoodPage(b: b))),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

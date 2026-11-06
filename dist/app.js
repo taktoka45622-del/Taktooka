@@ -1,23 +1,24 @@
-import {createCommercePage} from './commerce.js?v=1.7.4';
-import {createServerMonitor} from './server-monitor.js?v=2';
-import {createAccountAdmin} from './account-admin.js?v=1.6.93';
-import {setupPhoneActions,normalizeWhatsAppPhone,whatsappUrl} from './phone-actions.js?v=1.7.11';
-import {createGlobalSearch} from './global-search.js?v=1';
-import {createOperations} from './operations.js?v=1.6.90';
-import {playNoticeSound} from './notification-sound.js?v=1';
-import {setupKeyboardShortcuts} from './keyboard-shortcuts.js?v=1';
-import {createAppNavigation,requestAppBack,navigationChanged,navigationWillChange} from './app-navigation.js?v=4';
-import {openSectionScreen,closeSectionScreen,closeAllSectionScreens,getSectionScreens} from './screen-navigation.js?v=3';
-import {normalizeIraqiPhone} from './agents/phone.js?v=4';
-import {createExchangesPage} from './exchanges.js?v=1.6.93';
-import {createCouponCardPrinter} from './coupon-card-printer.js?v=1.6.68';
-import {createCouponRewards} from './coupon-rewards.js?v=1.6.89';
-import {createCompanyPage} from './company-performance.js?v=1.6.61';
-import {createRenderCache, createRequestTracker, debounceTask} from './performance.js?v=1.6.42';
+import {createPageLoader} from './skeleton.js?v=1.7.13-169';
+import {createCommercePage} from './commerce.js?v=1.7.13-169';
+import {createServerMonitor} from './server-monitor.js?v=1.7.13-169';
+import {createAccountAdmin} from './account-admin.js?v=1.7.13-169';
+import {setupPhoneActions,normalizeWhatsAppPhone,whatsappUrl} from './phone-actions.js?v=1.7.13-169';
+import {createGlobalSearch} from './global-search.js?v=1.7.13-169';
+import {createOperations} from './operations.js?v=1.7.13-169';
+import {playNoticeSound} from './notification-sound.js?v=1.7.13-169';
+import {setupKeyboardShortcuts} from './keyboard-shortcuts.js?v=1.7.13-169';
+import {createAppNavigation,requestAppBack,navigationChanged,navigationWillChange} from './app-navigation.js?v=1.7.13-169';
+import {openSectionScreen,closeSectionScreen,closeAllSectionScreens,getSectionScreens} from './screen-navigation.js?v=1.7.13-169';
+import {normalizeIraqiPhone} from './agents/phone.js?v=1.7.13-169';
+import {createExchangesPage} from './exchanges.js?v=1.7.13-169';
+import {createCouponCardPrinter} from './coupon-card-printer.js?v=1.7.13-169';
+import {createCouponRewards} from './coupon-rewards.js?v=1.7.13-169';
+import {createCompanyPage} from './company-performance.js?v=1.7.13-169';
+import {createRenderCache, createRequestTracker, debounceTask} from './performance.js?v=1.7.13-169';
 const renderCache=createRenderCache(), requestTracker=createRequestTracker();
 let appNavigation=null,detailAction=null;let navigationEpoch=0;const pageScroll=new Map();
-import { englishDigits, displayClock, displayTime, displayDateTime, setupEnglishNumbers, setupTwelveHourInputs, setupGroupedNumbers } from './display-format.js?v=1.6.41';
-import { createEmergencyAlarm } from './emergency-alarm.js?v=1.6.21';
+import { englishDigits, displayClock, displayTime, displayDateTime, setupEnglishNumbers, setupTwelveHourInputs, setupGroupedNumbers } from './display-format.js?v=1.7.13-169';
+import { createEmergencyAlarm } from './emergency-alarm.js?v=1.7.13-169';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.95.3';
 const db=createClient('https://typbkzwbrmkrfkfxjrgi.supabase.co','sb_publishable_Oto-5IRPHgWceHq_uzrsiw_JBBZbAOT',{auth:{storageKey:'taktooka-web-admin'}});
 const $=id=>document.getElementById(id);const status=text=>$('status').textContent=text;
@@ -256,8 +257,10 @@ function renderFavorites(){const list=$('favoriteList');list.replaceChildren();c
 function editFavorite(f){const body=openDetail('تعديل العنوان المفضل'),label=inputField('اسم العنوان',f.label),lat=inputField('خط العرض',f.lat,'number'),lng=inputField('خط الطول',f.lng,'number');lat.input.step=lng.input.step='any';body.append(label.box,lat.box,lng.box,Object.assign(text('div',''),{id:'favoriteMap',className:'admin-map'}),button('حفظ',async()=>{await manage('favorite_edit',{id:f.id,label:label.input.value,lat:Number(lat.input.value),lng:Number(lng.input.value)});closeDetail();await loadFavorites()}));dialogMap=mapFor('favoriteMap');dialogMap.setView([f.lat,f.lng],17);const marker=L.marker([f.lat,f.lng],{draggable:true}).addTo(dialogMap);const set=p=>{lat.input.value=p.lat;lng.input.value=p.lng;marker.setLatLng(p)};marker.on('dragend',()=>set(marker.getLatLng()));dialogMap.on('click',e=>set(e.latlng))}
 async function loadSecurity(){security=await manage('security');$('securityList').replaceChildren();for(const p of security)$('securityList').append(record(localPhone(p.phone),[['طلبات النافذة',p.requests+' / 40'],['بداية النافذة',dates(p.window_at)],['حالة النافذة',Date.now()-Date.parse(p.window_at)<900000?'جارية لمدة 15 دقيقة':'انتهت؛ العداد تاريخي'],['كلمة المرور الخاطئة','لا تحظر الحساب']],[button('فتح المحاولات',async()=>{if(confirm('فتح محاولات الدخول لهذا الرقم؟')){await manage('unlock_phone',{phone:p.phone});await loadSecurity()}})]));empty($('securityList'))}
 async function loadAudit(){[audit,archives]=await Promise.all([manage('audit',{limit:500}),manage('archives',{limit:500})]);$('auditList').replaceChildren();for(const a of audit){const row=record(`${a.actor_name||a.actor_id} · ${actionNames[a.action]||a.action}`,`${a.entity_id||''} · ${dates(a.created_at)}`),details=text('details',''),summary=text('summary','تفاصيل العملية');details.append(summary,Object.assign(text('pre',JSON.stringify(a.details,null,2)),{className:'audit-details'}));row.append(details);$('auditList').append(row)}empty($('auditList'));$('archiveList').replaceChildren();for(const a of archives)$('archiveList').append(record(`${archiveNames[a.kind]||a.kind} · ${a.entity_id}`,dates(a.created_at),[button('استرجاع',async()=>{if(confirm('استرجاع السجل إلى القائمة؟')){await manage('restore',{kind:a.kind,entity_id:a.entity_id});await loadAudit()}})]));empty($('archiveList'))}
-async function loadPage(name){if(name==='commerce')return commercePage.load();if(name==='restaurant-support')return commercePage.complaints();pageRefreshedAt.set(name,Date.now());if(name==='server')return serverMonitor.load();if(name==='exchanges')return exchangesPage.load();if(name==='rewards')return couponRewards.load();if(name==='company')return companyPage.load();if(name==='lines')return loadLines();if(name==='inventory')return loadInventory();if(name==='staff')return loadStaff();if(name==='pricing')return loadPricing();if(name==='coverage'){settings=await rpc('settings');zones=structuredClone(settings.zones);initMap();$('search').value=settings.search_s;$('eta').value=settings.max_eta_s/60;$('stale').value=settings.stale_s;render();return;}if(name==='wheel')return loadWheel();if(name==='banners')return loadBanners();if(name==='applications')return loadApplications();if(name==='overview')return loadOverview();if(name==='rides')return loadRides();if(name==='users')return loadUsers();if(name==='finance')return loadFinance();if(name==='support')return loadSupport();if(name==='favorites')return loadFavorites();if(name==='security')return loadSecurity();if(name==='audit')return loadAudit()}
-async function navigatePage(name){const epoch=++navigationEpoch;try{showPage(name);status('جاري تحديث البيانات…');await loadPage(name);if(epoch!==navigationEpoch||activePage!==name)return;applyDashboardPermissions();if(name==='overview'&&liveMap)requestAnimationFrame(()=>liveMap.invalidateSize());status('تم تحديث البيانات');}catch(e){if(epoch===navigationEpoch)status(message(e));}}
+const loadWithSkeleton=createPageLoader(document);
+function loadPage(name){return loadWithSkeleton($('page-'+name),()=>loadPageData(name)).then(value=>{pageRefreshedAt.set(name,Date.now());return value;});}
+async function loadPageData(name){if(name==='commerce')return commercePage.load();if(name==='restaurant-support')return commercePage.complaints();if(name==='server')return serverMonitor.load();if(name==='exchanges')return exchangesPage.load();if(name==='rewards')return couponRewards.load();if(name==='company')return companyPage.load();if(name==='lines')return loadLines();if(name==='inventory')return loadInventory();if(name==='staff')return loadStaff();if(name==='pricing')return loadPricing();if(name==='coverage'){settings=await rpc('settings');zones=structuredClone(settings.zones);initMap();$('search').value=settings.search_s;$('eta').value=settings.max_eta_s/60;$('stale').value=settings.stale_s;render();return;}if(name==='wheel')return loadWheel();if(name==='banners')return loadBanners();if(name==='applications')return loadApplications();if(name==='overview')return loadOverview();if(name==='rides')return loadRides();if(name==='users')return loadUsers();if(name==='finance')return loadFinance();if(name==='support')return loadSupport();if(name==='favorites')return loadFavorites();if(name==='security')return loadSecurity();if(name==='audit')return loadAudit()}
+async function navigatePage(name){const epoch=++navigationEpoch;try{showPage(name);status('جاري تحديث البيانات…');const recentStatic=['pricing','coverage','banners'].includes(name)&&Date.now()-(pageRefreshedAt.get(name)||0)<60000;if(!recentStatic&&!liveDirtyPages.has(name))await loadPage(name);if(epoch!==navigationEpoch||activePage!==name)return;applyDashboardPermissions();if(name==='overview'&&liveMap)requestAnimationFrame(()=>liveMap.invalidateSize());status('تم تحديث البيانات');}catch(e){if(epoch===navigationEpoch)status(message(e));}}
 for(const el of document.querySelectorAll('[data-page]'))el.onclick=()=>navigatePage(el.dataset.page);
 for(const [id,fn]of[['refreshOverview',loadOverview],['reloadRides',loadRides],['reloadUsers',loadUsers],['refreshFinance',loadFinance],['refreshSupport',loadSupport],['refreshFavorites',loadFavorites],['refreshSecurity',loadSecurity],['refreshAudit',loadAudit]])$(id).onclick=()=>run(()=>fn());
 $('moreRides').onclick=()=>run(()=>loadRides(true));$('moreUsers').onclick=()=>run(()=>loadUsers(true));
