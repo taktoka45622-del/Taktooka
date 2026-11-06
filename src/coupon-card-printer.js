@@ -1,4 +1,4 @@
-import {buildCouponCardsPdfAsync,loadCouponTemplate,downloadCouponPdf} from './coupon-card-pdf.js?v=1.6.68';
+import {buildCouponCardsPdfAsync,loadCouponTemplate,downloadCouponPdf} from './coupon-card-pdf.js?v=1.7.13-169';
 export function randomCardCode(){const digits=[];while(digits.length<10){for(const n of crypto.getRandomValues(new Uint8Array(16))){if(n>=250||(!digits.length&&n%10===0))continue;digits.push(String(n%10));if(digits.length===10)break;}}return digits.join('');}
 export function createCouponCardPrinter({document,rpc,canEdit,run,notify,dates,template=loadCouponTemplate,build=buildCouponCardsPdfAsync,download=downloadCouponPdf}) {
  const $=id=>document.getElementById(id);let pending=null,lastBatch=null,lastPdf=null,epoch=0,loading=false,activeMode=false;
