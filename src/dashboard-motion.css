@@ -52,3 +52,10 @@ body.signed-in main{width:auto;max-width:none;margin:16px 24px 28px 100px;paddin
 body:not(.signed-in) .topbar .page-heading h1{color:var(--ink)}
 body:not(.signed-in) .topbar .page-heading small{color:var(--muted)}
 body:not(.signed-in) #menuToggle,body:not(.signed-in) .dashboard-tools-button{display:none}
+
+.motion-assembling{position:relative;overflow:clip;isolation:isolate}
+.tkt-assembly-mark{position:absolute;z-index:3;width:10px;height:10px;pointer-events:none;color:#d90036;opacity:0}
+.tkt-assembly-mark::before,.tkt-assembly-mark::after{content:"";position:absolute;background:currentColor;border-radius:2px}
+.tkt-assembly-mark::before{width:10px;height:2px;top:4px;left:0}.tkt-assembly-mark::after{height:10px;width:2px;top:0;left:4px}
+.dashboard-intro{mask-image:none;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.tkt-assembly-mark{display:none}.motion-assembling{overflow:visible}}

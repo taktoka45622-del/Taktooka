@@ -2,7 +2,7 @@ import {JSDOM} from 'jsdom';import fs from 'node:fs';import assert from 'node:as
 const dom=new JSDOM(fs.readFileSync('src/index.html','utf8'),{runScripts:'outside-only',pretendToBeVisual:true});const {window:w}=dom,d=w.document;
 const media={matches:false,addEventListener(type,callback){this.change=callback;}};w.matchMedia=()=>media;w.scrollTo=()=>{};const frames=[];
 w.HTMLElement.prototype.animate=function(keyframes,options){frames.push({node:this,keyframes,options});return {cancel(){},finished:Promise.resolve()};};
-w.HTMLElement.prototype.getBoundingClientRect=()=>({top:100,left:80,width:500,height:500});
+w.HTMLElement.prototype.getBoundingClientRect=()=>({top:100,left:80,width:500,height:500,bottom:600,right:580});
 d.body.classList.add('signed-in');d.querySelector('#admin').hidden=false;d.querySelectorAll('.page').forEach(p=>p.hidden=true);d.querySelector('#page-company').hidden=false;
 w.eval(fs.readFileSync('src/dashboard-motion.js','utf8'));
 const tick=()=>new Promise(r=>setTimeout(r,0));const source=d.querySelector('#navigation [data-page="company"]'),rail=d.querySelector('.rail-links button');let clicks=0;source.onclick=()=>clicks++;rail.click();assert.equal(clicks,1);
@@ -16,6 +16,11 @@ for(const button of d.querySelectorAll('#navigation [data-page]')){w.showPage(bu
 assert.ok(leaves>=21);assert.throws(()=>w.showPage('forbidden'),/PERMISSION_DENIED/);
 w.showPage('company');await tick();const page=d.querySelector('#page-company');page.dataset.initialLoading='true';await tick();const before=frames.length;delete page.dataset.initialLoading;await tick();assert.ok(frames.length>before);
 const financials=d.querySelector('#companyFinancials');financials.innerHTML='<div class="company-metric"><strong>123,000 د.ع</strong></div>';page.hidden=true;await tick();page.hidden=false;await tick();const number=financials.querySelector('strong');assert.equal(number.firstChild.textContent,'123,000 د.ع');assert.equal(number.querySelector('.number-roll').getAttribute('aria-hidden'),'true');
-media.matches=true;media.change();assert.equal(d.querySelector('.dashboard-intro'),null);assert.equal(number.textContent,'123,000 د.ع');assert.equal(number.querySelector('.number-roll'),null);
+
+const assemblyFrames=frames.filter(f=>[560,740].includes(f.options.duration));assert.ok(assemblyFrames.length>10);assert.ok(new Set(assemblyFrames.map(f=>f.keyframes[0].transform)).size>=4);assert.ok(assemblyFrames.every(f=>f.keyframes.every(k=>!('filter' in k))));
+const samePageFrames=frames.length;number.firstChild.textContent='130,000 د.ع';await tick();assert.equal(frames.length,samePageFrames);
+const modal=d.createElement('dialog');modal.className='section-screen';modal.innerHTML='<div class="section-screen-body"><div class="card"><h2>تفاصيل</h2><div class="record">سجل</div></div></div>';d.body.append(modal);await tick();const modalBefore=frames.length;modal.setAttribute('open','');await tick();assert.ok(frames.length>modalBefore);modal.removeAttribute('open');await tick();assert.equal(modal.classList.contains('motion-assembling'),false);modal.remove();
+for(const name of ['overview','company','users','finance','company'])w.showPage(name);await tick();await tick();assert.equal(d.querySelectorAll('.page:not([hidden])').length,1);assert.equal(d.querySelectorAll('.tkt-assembly-mark').length,0);assert.equal(d.querySelectorAll('.page-outgoing').length,0);
+number.firstChild.textContent='123,000 د.ع';media.matches=true;media.change();assert.equal(d.querySelector('.dashboard-intro'),null);assert.equal(number.textContent,'123,000 د.ع');assert.equal(number.querySelector('.number-roll'),null);
 assert.equal(new Set([...d.querySelectorAll('[id]')].map(x=>x.id)).size,d.querySelectorAll('[id]').length);
-await tick();dom.window.close();console.log('PASS: 22 pages, original navigation, permission denial, tools, loading completion, accessible number motion, reduced motion and unique IDs');
+d.body.classList.remove('signed-in');await tick();assert.equal(d.querySelectorAll('.motion-assembling').length,0);await tick();dom.window.close();console.log('PASS: 22 pages, original navigation, permission denial, tools, loading completion, assembly directions, modal opening, rapid navigation, no replay on refresh, reduced motion, logout and unique IDs');
