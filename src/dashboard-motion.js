@@ -10,6 +10,18 @@ const toolsButton=document.createElement('button');toolsButton.type='button';too
 function closeTools(){tools.hidden=true;toolsButton.setAttribute('aria-expanded','false');}
 toolsButton.onclick=()=>{const open=tools.hidden;tools.hidden=!open;toolsButton.setAttribute('aria-expanded',String(open));};
 document.addEventListener('click',event=>{if(!tools.contains(event.target)&&!toolsButton.contains(event.target))closeTools();});document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!tools.hidden){closeTools();toolsButton.focus();}});
+const themeKey='tkt-dashboard-theme',themeScheme=window.matchMedia('(prefers-color-scheme: dark)');
+const themeButton=document.createElement('button');themeButton.type='button';themeButton.className='dashboard-theme-toggle';themeButton.id='dashboardThemeToggle';header.append(themeButton);
+function storedTheme(){try{const value=localStorage.getItem(themeKey);return value==='dark'||value==='light'?value:null;}catch{return null;}}
+function setDashboardTheme(theme,persist=false){
+ document.documentElement.dataset.theme=theme;const dark=theme==='dark';themeButton.setAttribute('aria-label',dark?'تفعيل الوضع النهاري':'تفعيل الوضع الليلي');themeButton.setAttribute('aria-pressed',String(dark));themeButton.title=dark?'تفعيل الوضع النهاري':'تفعيل الوضع الليلي';
+ themeButton.innerHTML=dark?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg><span>نهاري</span>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M21 13a9 9 0 0 1-10-10 9 9 0 1 0 10 10Z"/></svg><span>ليلي</span>';
+ if(persist)try{localStorage.setItem(themeKey,theme);}catch{}
+}
+themeButton.onclick=()=>setDashboardTheme(document.documentElement.dataset.theme==='dark'?'light':'dark',true);
+themeScheme.addEventListener?.('change',()=>{if(!storedTheme())setDashboardTheme(themeScheme.matches?'dark':'light');});
+window.addEventListener('storage',event=>{if(event.key===themeKey)setDashboardTheme(storedTheme()||(themeScheme.matches?'dark':'light'));});
+setDashboardTheme(storedTheme()||(themeScheme.matches?'dark':'light'));
 const reduced=window.matchMedia('(prefers-reduced-motion: reduce)');
 let signed=false,introAnimation;
 const rollTimers=new Map();
@@ -104,7 +116,5 @@ function watchSurface(surface){
 }
 for(const surface of document.querySelectorAll('.page,dialog.section-screen,#detailDialog,#chatScreen'))watchSurface(surface);
 new MutationObserver(records=>{for(const record of records)for(const node of record.addedNodes){if(node.nodeType!==1)continue;if(node.matches('dialog.section-screen')){watchSurface(node);}for(const dialog of node.querySelectorAll('dialog.section-screen'))watchSurface(dialog);}}).observe(document.body,{childList:true});
-document.addEventListener('focusin',event=>{for(const [surface]of surfaceRuns)if(surface.contains(event.target)){finishSurface(surface);break;}});
-for(const type of ['wheel','touchstart','pointerdown'])document.addEventListener(type,event=>{for(const [surface]of surfaceRuns)if(surface.contains(event.target)){finishSurface(surface);break;}},{passive:true});
 reduced.addEventListener?.('change',()=>{if(reduced.matches){stopIntro();stopAllSurfaces();for(const [node,timer]of rollTimers){clearTimeout(timer);node.querySelector('.number-roll')?.remove();node.classList.remove('rolling-value');}rollTimers.clear();}});
 sync();
