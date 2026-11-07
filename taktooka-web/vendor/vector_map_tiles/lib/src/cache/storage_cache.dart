@@ -26,7 +26,6 @@ class StorageCache with CacheStats {
       }
       return bytes;
     } catch (e) {
-      // ignore, file was likely deleted
       return null;
     }
   }
@@ -45,7 +44,6 @@ class StorageCache with CacheStats {
       await _applyMaxAge();
       await _applyMaxSize();
     } catch (e) {
-      // ignore, race condition directory may have been deleted
     }
   }
 
@@ -72,7 +70,6 @@ class StorageCache with CacheStats {
             break;
           }
         } catch (e) {
-          // ignore, race condition file was deleted
         }
       }
     }

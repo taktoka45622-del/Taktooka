@@ -24,7 +24,6 @@ class StorageImageCache {
       try {
         return await imageFrom(bytes: bytes);
       } catch (error, stack) {
-        // in case the byte data is invalid, discard and remove the cached value
         // ignore: avoid_print
         print(error);
         // ignore: avoid_print

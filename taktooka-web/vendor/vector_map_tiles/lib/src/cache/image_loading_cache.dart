@@ -16,7 +16,6 @@ class ImageLoadingCache {
 
   ImageLoadingCache({required this.delegate, required this.providers});
 
-  /// caller is responsible for disposing the image
   Future<Image> retrieve(String source, TileIdentity tile) async {
     final key = _toKey(source, tile);
     final memoryCached = memoryCache.get(key);
@@ -62,7 +61,6 @@ class ImageLoadingCache {
         await delegate.put(key, bytes.buffer.asUint8List());
       }
     } catch (_) {
-      // nothing to do
     } finally {
       cloned.dispose();
     }

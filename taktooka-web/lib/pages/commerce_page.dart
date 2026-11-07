@@ -1,3 +1,4 @@
+import 'package:taktooka/widgets/food_restaurant_payment.dart';
 import 'package:taktooka/services/page_snapshot_cache.dart';
 import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/services/food_catalog_cache.dart';
@@ -205,8 +206,19 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  Future<void> load({bool silent = false}) =>
-      _loadGate.run((_) => _loadOnce(silent: silent), queue: !silent);
+  Future<void> load({bool silent = false, bool force = false}) => _loadGate.run(
+    (fresh) async {
+      if (fresh) catalogCache.clearForRefresh();
+      await _loadOnce(silent: silent);
+    },
+    full: force,
+    queue: !silent,
+  );
+
+  Future<void> refreshFromServer() async {
+    await load(force: true);
+    await Future.wait([refreshFavorites(), HomeBanners.refreshFor(b)]);
+  }
 
   Future<void> _loadOnce({bool silent = false}) async {
     if (busy || !mounted) return;
@@ -225,7 +237,26 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
           ? Json.from(nextMe['restaurant'])
           : null;
       setState(() => me = nextMe);
-      final nextSelected = nextRestaurant ?? selected;
+      var nextSelected = nextRestaurant ?? selected;
+      if (tab == 0 &&
+          nextSelected != null &&
+          nextRestaurant == null &&
+          !courier) {
+        final position = b.knownPosition;
+        final area =
+            _restaurantArea ??
+            (position == null ? null : [position.latitude, position.longitude]);
+        if (area != null) {
+          final freshShops = Backend.rows(
+            await commerceRpc(b, 'restaurants', {'location': area}),
+          );
+          final selectedId = nextSelected['id'];
+          final fresh = freshShops
+              .where((shop) => shop['id'] == selectedId)
+              .firstOrNull;
+          if (fresh != null) nextSelected = fresh;
+        }
+      }
       List<Json>? nextMenu, nextShops, nextCatalog;
       if (tab == 0 && nextSelected != null && !courier) {
         nextMenu = Backend.rows(
@@ -282,7 +313,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
         me = nextMe;
         orders = Backend.rows(values[1]);
         accounts = Json.from(values[2] as Map);
-        if (nextRestaurant != null) selected = nextRestaurant;
+        if (nextSelected != null) selected = nextSelected;
         if (nextMenu != null) menu = nextMenu;
         if (nextShops != null)
           shops = nextShops
@@ -402,8 +433,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                 Text(restaurant['description'] ?? ''),
                 Text(restaurant['address'] ?? ''),
                 const SizedBox(height: 16),
-                for (final item in menu.where((m) => m['available'] == true))
-                  mealCard(item, preview: true),
+                for (final item in menu) mealCard(item, preview: true),
               ],
             ),
           ),
@@ -645,8 +675,12 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
           SizedBox(
             width: 100,
             child: InkWell(
-              onTap: () =>
-                  !owner && !preview ? openMeal(item) : showMealPhotos(item),
+              onTap: owner || preview
+                  ? () => showMealPhotos(item)
+                  : item['available'] == false ||
+                        !restaurantIsOpen(selected ?? {}, now: b.serverNow)
+                  ? null
+                  : () => openMeal(item),
               child: Column(
                 children: [
                   photo(item['image_path'], height: 100),
@@ -695,7 +729,12 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                 ),
                 if (!preview && !owner)
                   TextButton.icon(
-                    onPressed: busy ? null : () => openMeal(item),
+                    onPressed:
+                        busy ||
+                            item['available'] == false ||
+                            !restaurantIsOpen(selected ?? {}, now: b.serverNow)
+                        ? null
+                        : () => openMeal(item),
                     icon: const Icon(Icons.add_circle, color: scarlet),
                     label: const Text('اختيار الوجبة'),
                   ),
@@ -851,6 +890,8 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
   Future<void> openMeal(Json item, {Json? previous, Json? shopOverride}) async {
     if ((selected == null && shopOverride == null) || busy) return;
     final shop = Json.from(shopOverride ?? selected!);
+    if (item['available'] == false || !restaurantIsOpen(shop, now: b.serverNow))
+      return;
     final savedOffset = foodScroll.hasClients ? foodScroll.offset : 0.0;
     final result = await Navigator.push<Json>(
       context,
@@ -864,6 +905,32 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
             toggleFavorite: () => favorites.toggle(shop),
             photo: photo,
             initial: previous,
+            refreshData: () async {
+              catalogCache.clearForRefresh();
+              final freshMenu = Backend.rows(
+                await commerceRpc(b, 'menu', {'restaurant_id': shop['id']}),
+              );
+              final freshMeal = freshMenu
+                  .where((meal) => meal['id'] == item['id'])
+                  .firstOrNull;
+              if (freshMeal == null)
+                return (meal: {...item, 'available': false}, restaurant: shop);
+              final position = b.knownPosition;
+              final area =
+                  _restaurantArea ??
+                  (position == null
+                      ? null
+                      : [position.latitude, position.longitude]);
+              final freshShops = area == null
+                  ? <Json>[]
+                  : Backend.rows(
+                      await commerceRpc(b, 'restaurants', {'location': area}),
+                    );
+              final freshShop =
+                  freshShops.where((r) => r['id'] == shop['id']).firstOrNull ??
+                  shop;
+              return (meal: freshMeal, restaurant: freshShop);
+            },
           ),
         ),
       ),
@@ -1109,7 +1176,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                   ),
                   Flexible(
                     child: CommerceStatus(
-                      foodStates[status] ?? status,
+                      foodStatusForViewer(o, b),
                       color: status == 'delivered'
                           ? Colors.green
                           : status == 'rejected'
@@ -1350,10 +1417,10 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                   onPressed: busy ? null : () => change(o, 'rejected'),
                   child: const Text('رفض الطلب — مع ذكر السبب'),
                 ),
-              if (mine && status == 'delivered')
-                const Text(
-                  'يجب التوجه للمطعم وتسليمه الأموال',
-                  style: TextStyle(color: scarlet, fontWeight: FontWeight.bold),
+              if (owner || mine)
+                FoodRestaurantPayment(
+                  paidAt: o['restaurant_paid_at'],
+                  showUnpaid: mine && status == 'delivered',
                 ),
               if (owner && o['captain_id'] != null)
                 TextButton(
@@ -1750,7 +1817,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
     body: loading
         ? const SkeletonPage()
         : RefreshIndicator(
-            onRefresh: load,
+            onRefresh: refreshFromServer,
             child: CustomScrollView(
               key: const PageStorageKey('food-page-scroll'),
               controller: foodScroll,
@@ -1934,6 +2001,7 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                               )
                               .toList(),
                           meals: catalog,
+                          invalidateCache: catalogCache.clearForRefresh,
                           findMeals: (query) async => _restaurantArea == null
                               ? []
                               : Backend.rows(
@@ -1947,6 +2015,15 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                                   }),
                                 ),
                           favorites: favorites.restaurants
+                              .map(
+                                (saved) =>
+                                    shops
+                                        .where(
+                                          (shop) => shop['id'] == saved['id'],
+                                        )
+                                        .firstOrNull ??
+                                    saved,
+                              )
                               .where(
                                 (r) =>
                                     restaurantWithinRange(r, _restaurantArea),
@@ -2100,6 +2177,18 @@ class _FoodPageState extends State<FoodPage> with WidgetsBindingObserver {
                                 ),
                               ),
                             ],
+                          ),
+                          Text(
+                            restaurantIsOpen(selected!, now: b.serverNow)
+                                ? 'مفتوح الآن'
+                                : 'المطعم مغلق حاليًا',
+                            style: TextStyle(
+                              color:
+                                  restaurantIsOpen(selected!, now: b.serverNow)
+                                  ? Colors.green
+                                  : Colors.orange,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           Text(
                             selected!['address'] ?? '',

@@ -3,18 +3,12 @@ import 'dart:typed_data';
 
 import '../../vector_map_tiles.dart';
 
-/// provides tiles from a filesystem folder.
-/// tiles are expected to be organized by `root/z/x/y.extension`
-///
 class FileVectorTileProvider extends VectorTileProvider {
   @override
   final TileProviderType type;
 
-  /// the file extension of files to load, e.g. png or pbf
   final String extension;
 
-  /// The path to the root folder of the tiles.
-  /// May be absolute or relative.
   final String root;
 
   @override

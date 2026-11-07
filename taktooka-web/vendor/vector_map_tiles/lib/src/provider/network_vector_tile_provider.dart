@@ -19,13 +19,6 @@ class NetworkVectorTileProvider extends VectorTileProvider {
   @override
   TileOffset tileOffset;
 
-  /// [urlTemplate] the URL template, e.g. `'https://tiles.stadiamaps.com/data/openmaptiles/{z}/{x}/{y}.pbf?api_key=$apiKey'`
-  /// [httpHeaders] HTTP headers to include in requests, suitable for passing
-  ///  `Authentication` header instead of an `api_key` in the URL template
-  /// [maximumZoom] the maximum zoom supported by the tile provider, not to be
-  ///  confused with the maximum zoom of the map widget. The map widget will
-  ///  automatically use vector tiles from lower zoom levels once the maximum
-  ///  supported by this provider is reached.
   NetworkVectorTileProvider(
       {required String urlTemplate,
       this.type = TileProviderType.vector,

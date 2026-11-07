@@ -423,6 +423,7 @@ class _CaptainRegistrationPageState extends State<CaptainRegistrationPage>
         : RefreshIndicator(
             onRefresh: () => load(),
             child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(20),
               children: [
                 if (error != null) ...[

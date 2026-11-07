@@ -1,3 +1,4 @@
+import 'package:taktooka/services/refresh_gate.dart';
 import 'package:taktooka/widgets/app_notice.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'dart:async';
@@ -32,7 +33,10 @@ class _AdminFeaturesState extends State<AdminFeatures> {
     load();
   }
 
-  Future<void> load() async {
+  final _manualRefreshGate = RefreshGate();
+  Future<void> load() => _manualRefreshGate.run((_) => _loadOnce());
+
+  Future<void> _loadOnce() async {
     try {
       final res = Json.from(await widget.b.extra('admin_snapshot') as Map);
       if (mounted)
@@ -181,6 +185,7 @@ class _AdminFeaturesState extends State<AdminFeatures> {
   Widget build(BuildContext context) => RefreshIndicator(
     onRefresh: load,
     child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(18),
       children: [
         OutlinedButton.icon(

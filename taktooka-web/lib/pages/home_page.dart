@@ -86,8 +86,11 @@ class HomePage extends StatelessWidget {
     return HomeBanners(
       backend: b,
       builder: (context, banners) => RefreshIndicator(
-        onRefresh: b.refresh,
+        onRefresh: () async {
+          await Future.wait([b.refresh(), HomeBanners.refreshFor(b)]);
+        },
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.all(18 * scale),
           children: [
             Row(

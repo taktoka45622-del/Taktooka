@@ -22,6 +22,7 @@ class WalletPage extends StatelessWidget {
     return RefreshIndicator(
       onRefresh: b.refresh,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(18),
         children: [
           SectionTitle(b.captain ? 'مستحقات الكابتن' : 'محفظتي'),

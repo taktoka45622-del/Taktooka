@@ -176,7 +176,6 @@ class TileLoader {
     try {
       await _imageCache.put(tile, cloned);
     } catch (_) {
-      // nothing to do
     } finally {
       cloned.dispose();
     }

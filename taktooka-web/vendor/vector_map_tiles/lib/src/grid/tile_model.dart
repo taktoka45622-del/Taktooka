@@ -204,9 +204,7 @@ class _VectorTileModelLoader {
         model._receiveTile(tileResponse, rasterTileset, spriteImage);
       } catch (e) {
         if (e is SocketException) {
-          // nothing to do
         } else if (e is CancellationException) {
-          // nothing to do
         } else {
           rethrow;
         }

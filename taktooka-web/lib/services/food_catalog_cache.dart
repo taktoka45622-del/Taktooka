@@ -49,6 +49,11 @@ class FoodCatalogCache extends ChangeNotifier {
 
   String key(String action, Json data) =>
       '${b.db.auth.currentUser?.id}:${b.cacheEpoch}:$action:${jsonEncode(data)}';
+  void clearForRefresh() {
+    generation++;
+    _values.clear();
+  }
+
   void invalidate() {
     generation++;
     _values.clear();
@@ -63,7 +68,7 @@ class FoodCatalogCache extends ChangeNotifier {
     final round = generation;
     final requestKey = key(action, data);
     final name = '$generation:$requestKey', saved = _values[requestKey];
-    if (saved != null && DateTime.now().difference(saved.$1).inSeconds < 90)
+    if (saved != null && DateTime.now().difference(saved.$1).inSeconds < 8)
       return jsonDecode(jsonEncode(saved.$2));
     final value = await (_pending[name] ??= request().whenComplete(() {
       _pending.remove(name);

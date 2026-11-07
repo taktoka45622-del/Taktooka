@@ -77,7 +77,10 @@ class _HistoryPageState extends State<HistoryPage> {
     super.dispose();
   }
 
-  Future<void> loadLines() async {
+  final _linesRefreshGate = RefreshGate();
+  Future<void> loadLines() => _linesRefreshGate.run((_) => _loadLinesOnce());
+
+  Future<void> _loadLinesOnce() async {
     if (loading || !widget.backend.loggedIn) return;
     final current = ++epoch;
     loading = true;

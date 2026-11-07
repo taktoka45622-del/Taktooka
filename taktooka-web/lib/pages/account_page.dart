@@ -181,167 +181,171 @@ class _AccountPageState extends State<AccountPage> {
     PreferencesScope.of(context);
     final b = widget.backend;
     if (!b.loggedIn) return PhoneLoginPage(backend: b);
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        Center(
-          child: InkWell(
-            onTap: photoBusy || saving ? null : choosePhoto,
-            borderRadius: BorderRadius.circular(60),
-            child: Stack(
-              alignment: Alignment.bottomLeft,
-              children: [
-                ProfilePhoto(path: b.profile?['avatar_path'], size: 110),
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: const BoxDecoration(
-                    color: scarlet,
-                    shape: BoxShape.circle,
+    return RefreshIndicator(
+      onRefresh: b.refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        children: [
+          Center(
+            child: InkWell(
+              onTap: photoBusy || saving ? null : choosePhoto,
+              borderRadius: BorderRadius.circular(60),
+              child: Stack(
+                alignment: Alignment.bottomLeft,
+                children: [
+                  ProfilePhoto(path: b.profile?['avatar_path'], size: 110),
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: const BoxDecoration(
+                      color: scarlet,
+                      shape: BoxShape.circle,
+                    ),
+                    child: photoBusy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: SkeletonActivity(height: 16),
+                          )
+                        : const Icon(
+                            Icons.camera_alt_outlined,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                   ),
-                  child: photoBusy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: SkeletonActivity(height: 16),
-                        )
-                      : const Icon(
-                          Icons.camera_alt_outlined,
-                          color: Colors.white,
-                          size: 20,
-                        ),
+                ],
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: photoBusy || saving ? null : choosePhoto,
+            child: const AppText('تعديل الصورة الشخصية'),
+          ),
+          const SizedBox(height: 18),
+          const AppText(
+            'بيانات حسابي',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 24),
+          Form(
+            key: form,
+            child: Column(
+              children: [
+                TextFormField(
+                  inputFormatters: const [EnglishDigitsFormatter()],
+                  controller: name,
+                  maxLength: 80,
+                  decoration: localizedInput(
+                    context,
+                    InputDecoration(
+                      labelText: 'الاسم الكامل',
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                  ),
+                  validator: (v) => (v?.trim().isNotEmpty ?? false)
+                      ? null
+                      : uiText('اكتب اسمك', gender: gender),
+                ),
+                TextFormField(
+                  inputFormatters: const [EnglishDigitsFormatter()],
+                  controller: phone,
+                  readOnly: true,
+                  textDirection: TextDirection.ltr,
+                  decoration: localizedInput(
+                    context,
+                    InputDecoration(
+                      labelText: 'رقم الهاتف',
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                      prefixIcon: Icon(Icons.phone_outlined),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Align(
+                  alignment: Alignment.centerRight,
+                  child: AppText(
+                    'الجنس',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'male',
+                        icon: Icon(Icons.male),
+                        label: AppText('ذكر'),
+                      ),
+                      ButtonSegment(
+                        value: 'female',
+                        icon: Icon(Icons.female),
+                        label: AppText('أنثى'),
+                      ),
+                    ],
+                    selected: {gender},
+                    onSelectionChanged: saving || photoBusy
+                        ? null
+                        : (values) => setState(() => gender = values.single),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                AppText(
+                  gender == 'female' ? 'وين تريدين نروح؟' : 'وين تريد نروح؟',
+                  style: const TextStyle(color: muted, fontSize: 13),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton(
+                    onPressed: saving || photoBusy ? null : save,
+                    child: saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: SkeletonActivity(height: 16),
+                          )
+                        : const AppText('حفظ بياناتي'),
+                  ),
                 ),
               ],
             ),
           ),
-        ),
-        TextButton(
-          onPressed: photoBusy || saving ? null : choosePhoto,
-          child: const AppText('تعديل الصورة الشخصية'),
-        ),
-        const SizedBox(height: 18),
-        const AppText(
-          'بيانات حسابي',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 24),
-        Form(
-          key: form,
-          child: Column(
-            children: [
-              TextFormField(
-                inputFormatters: const [EnglishDigitsFormatter()],
-                controller: name,
-                maxLength: 80,
-                decoration: localizedInput(
-                  context,
-                  InputDecoration(
-                    labelText: 'الاسم الكامل',
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                ),
-                validator: (v) => (v?.trim().isNotEmpty ?? false)
-                    ? null
-                    : uiText('اكتب اسمك', gender: gender),
-              ),
-              TextFormField(
-                inputFormatters: const [EnglishDigitsFormatter()],
-                controller: phone,
-                readOnly: true,
-                textDirection: TextDirection.ltr,
-                decoration: localizedInput(
-                  context,
-                  InputDecoration(
-                    labelText: 'رقم الهاتف',
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                    prefixIcon: Icon(Icons.phone_outlined),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Align(
-                alignment: Alignment.centerRight,
-                child: AppText(
-                  'الجنس',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 'male',
-                      icon: Icon(Icons.male),
-                      label: AppText('ذكر'),
+          if (b.captain)
+            AppText(
+              'الاشتراك: ${b.subscribed ? displayDateTime(b.profile!['expires_at']) : 'غير فعّال'}',
+            ),
+          TextButton(
+            onPressed: saving || photoBusy
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AccountDeletionPage(backend: b),
                     ),
-                    ButtonSegment(
-                      value: 'female',
-                      icon: Icon(Icons.female),
-                      label: AppText('أنثى'),
-                    ),
-                  ],
-                  selected: {gender},
-                  onSelectionChanged: saving || photoBusy
-                      ? null
-                      : (values) => setState(() => gender = values.single),
-                ),
-              ),
-              const SizedBox(height: 8),
-              AppText(
-                gender == 'female' ? 'وين تريدين نروح؟' : 'وين تريد نروح؟',
-                style: const TextStyle(color: muted, fontSize: 13),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: FilledButton(
-                  onPressed: saving || photoBusy ? null : save,
-                  child: saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: SkeletonActivity(height: 16),
-                        )
-                      : const AppText('حفظ بياناتي'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (b.captain)
-          AppText(
-            'الاشتراك: ${b.subscribed ? displayDateTime(b.profile!['expires_at']) : 'غير فعّال'}',
-          ),
-        TextButton(
-          onPressed: saving || photoBusy
-              ? null
-              : () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => AccountDeletionPage(backend: b),
                   ),
-                ),
-          child: const AppText(
-            'حذف الحساب نهائيًا',
-            style: TextStyle(color: scarlet),
+            child: const AppText(
+              'حذف الحساب نهائيًا',
+              style: TextStyle(color: scarlet),
+            ),
           ),
-        ),
-        TextButton(
-          onPressed: saving || photoBusy
-              ? null
-              : () async {
-                  setState(() => saving = true);
-                  try {
-                    await accountRun(b.signOut);
-                  } finally {
-                    if (mounted) setState(() => saving = false);
-                  }
-                },
-          child: const AppText('تسجيل خروج'),
-        ),
-      ],
+          TextButton(
+            onPressed: saving || photoBusy
+                ? null
+                : () async {
+                    setState(() => saving = true);
+                    try {
+                      await accountRun(b.signOut);
+                    } finally {
+                      if (mounted) setState(() => saving = false);
+                    }
+                  },
+            child: const AppText('تسجيل خروج'),
+          ),
+        ],
+      ),
     );
   }
 }

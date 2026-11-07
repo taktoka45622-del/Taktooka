@@ -92,7 +92,6 @@ class _ImageStreamCompleter extends ImageStreamCompleter {
     try {
       super.setImage(image);
     } on StateError catch (_) {
-      // expected, disposed
       image.dispose();
     }
   }

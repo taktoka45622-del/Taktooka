@@ -32,137 +32,146 @@ class ProfileHub extends StatelessWidget {
     required this.invite,
   });
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(18),
-    children: [
-      const SectionTitle('حسابي'),
-      PaperCard(
-        onTap: edit,
-        child: Row(
-          children: [
-            ProfilePhoto(path: b.profile?['avatar_path'], size: 56),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AppText(
-                    b.loggedIn ? (b.profile?['name'] ?? 'حسابي') : 'أهلًا بيك',
-                    style: heading(20),
-                  ),
-                  AppText(
-                    b.loggedIn
-                        ? (b.profile?['phone'] ?? '')
-                        : 'سجّل دخولك حتى تطلب مشوار',
-                    textDirection: TextDirection.ltr,
-                    style: const TextStyle(color: muted, fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
-            const CategoryIcon(
-              Icons.edit_outlined,
-              circle: true,
-              size: 42,
-              color: Color(0xff555555),
-              background: Color(0xfff3f4f5),
-            ),
-          ],
-        ),
-      ),
-      if (b.captain) ...[
+  Widget build(BuildContext context) => RefreshIndicator(
+    onRefresh: b.refresh,
+    child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(18),
+      children: [
+        const SectionTitle('حسابي'),
         PaperCard(
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => FoodPage(b: b))),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          onTap: edit,
+          child: Row(
             children: [
-              AppText('أموال الشركة — يجب تسديدها', style: heading(18)),
-              AppText(
-                money(b.commerce['company_debt'] ?? 0),
-                style: heading(25),
+              ProfilePhoto(path: b.profile?['avatar_path'], size: 56),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AppText(
+                      b.loggedIn
+                          ? (b.profile?['name'] ?? 'حسابي')
+                          : 'أهلًا بيك',
+                      style: heading(20),
+                    ),
+                    AppText(
+                      b.loggedIn
+                          ? (b.profile?['phone'] ?? '')
+                          : 'سجّل دخولك حتى تطلب مشوار',
+                      textDirection: TextDirection.ltr,
+                      style: const TextStyle(color: muted, fontSize: 14),
+                    ),
+                  ],
+                ),
               ),
-              if (b.commerce['debt_blocked'] == true)
-                FilledButton(onPressed: support, child: const AppText('تجديد')),
+              const CategoryIcon(
+                Icons.edit_outlined,
+                circle: true,
+                size: 42,
+                color: Color(0xff555555),
+                background: Color(0xfff3f4f5),
+              ),
             ],
+          ),
+        ),
+        if (b.captain) ...[
+          PaperCard(
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => FoodPage(b: b))),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AppText('أموال الشركة — يجب تسديدها', style: heading(18)),
+                AppText(
+                  money(b.commerce['company_debt'] ?? 0),
+                  style: heading(25),
+                ),
+                if (b.commerce['debt_blocked'] == true)
+                  FilledButton(
+                    onPressed: support,
+                    child: const AppText('تجديد'),
+                  ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        PaperCard(
+          onTap: wallet,
+          child: Row(
+            children: [
+              const CategoryIcon(Icons.account_balance_wallet, size: 52),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AppText(
+                      b.captain ? 'مستحقاتك لدى الشركة' : 'الرصيد',
+                      style: const TextStyle(color: muted, fontSize: 16),
+                    ),
+                    AppText(money(b.balance), style: heading(25)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_left),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        PaperCard(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Column(
+            children: [
+              menu(Icons.history, 'رحلاتي', history),
+              const Divider(height: 1),
+              if (!b.captain) ...[
+                menu(Icons.location_on_outlined, 'العناوين المفضلة', addresses),
+                const Divider(height: 1),
+                menu(Icons.confirmation_number_outlined, 'قسائم الخصم', offers),
+                const Divider(height: 1),
+              ],
+              if (b.captain)
+                menu(Icons.casino_outlined, 'عجلة الجوائز', () {
+                  if (!b.loggedIn) {
+                    edit();
+                    return;
+                  }
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => PrizeWheelPage(backend: b),
+                    ),
+                  );
+                }),
+              menu(Icons.share_outlined, 'دعوة أصدقائك', invite),
+              const Divider(height: 1),
+              menu(Icons.settings_outlined, 'الإعدادات', settings),
+              const Divider(height: 1),
+              menu(Icons.info_outline, 'حول تكتوكة', about),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        PaperCard(
+          onTap: support,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const CategoryIcon(Icons.headset_mic_outlined),
+            title: const AppText(
+              'تواصل مع الدعم',
+              style: TextStyle(fontSize: 18),
+            ),
+            subtitle: const AppText(
+              'نحن هنا لمساعدتك دائمًا',
+              style: TextStyle(color: muted),
+            ),
+            trailing: const Icon(Icons.chevron_left),
           ),
         ),
       ],
-      const SizedBox(height: 14),
-      PaperCard(
-        onTap: wallet,
-        child: Row(
-          children: [
-            const CategoryIcon(Icons.account_balance_wallet, size: 52),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AppText(
-                    b.captain ? 'مستحقاتك لدى الشركة' : 'الرصيد',
-                    style: const TextStyle(color: muted, fontSize: 16),
-                  ),
-                  AppText(money(b.balance), style: heading(25)),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_left),
-          ],
-        ),
-      ),
-      const SizedBox(height: 14),
-      PaperCard(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Column(
-          children: [
-            menu(Icons.history, 'رحلاتي', history),
-            const Divider(height: 1),
-            if (!b.captain) ...[
-              menu(Icons.location_on_outlined, 'العناوين المفضلة', addresses),
-              const Divider(height: 1),
-              menu(Icons.confirmation_number_outlined, 'قسائم الخصم', offers),
-              const Divider(height: 1),
-            ],
-            if (b.captain)
-              menu(Icons.casino_outlined, 'عجلة الجوائز', () {
-                if (!b.loggedIn) {
-                  edit();
-                  return;
-                }
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => PrizeWheelPage(backend: b),
-                  ),
-                );
-              }),
-            menu(Icons.share_outlined, 'دعوة أصدقائك', invite),
-            const Divider(height: 1),
-            menu(Icons.settings_outlined, 'الإعدادات', settings),
-            const Divider(height: 1),
-            menu(Icons.info_outline, 'حول تكتوكة', about),
-          ],
-        ),
-      ),
-      const SizedBox(height: 14),
-      PaperCard(
-        onTap: support,
-        child: ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const CategoryIcon(Icons.headset_mic_outlined),
-          title: const AppText(
-            'تواصل مع الدعم',
-            style: TextStyle(fontSize: 18),
-          ),
-          subtitle: const AppText(
-            'نحن هنا لمساعدتك دائمًا',
-            style: TextStyle(color: muted),
-          ),
-          trailing: const Icon(Icons.chevron_left),
-        ),
-      ),
-    ],
+    ),
   );
   Widget menu(IconData icon, String title, VoidCallback action) => ListTile(
     contentPadding: const EdgeInsets.symmetric(horizontal: 8),

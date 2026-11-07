@@ -411,6 +411,18 @@ class _RideMapState extends State<RideMap>
         setState(() => quote = null);
         unawaited(calculate());
       }
+      final preview = _offerPreview;
+      final previewId = preview?['offer_id']?.toString();
+      if (previewId != _previewOfferId) {
+        _previewOfferId = previewId;
+        setState(() {});
+        if (preview != null) {
+          _followOwnLocation = false;
+          _fitOffer(preview);
+        } else if (b.captain && b.activeRide == null) {
+          _followOwnLocation = true;
+        }
+      }
       final fresh = _captainFresh;
       final ride = b.activeRide;
       final ready = ride != null && rideEmergencyReady(ride, b.serverNow);
@@ -480,11 +492,45 @@ class _RideMapState extends State<RideMap>
     super.dispose();
   }
 
+  String? _previewOfferId;
+
+  Json? get _offerPreview {
+    if (!b.captain || b.activeRide != null) return null;
+    for (final offer in b.requests) {
+      if (b.offerSeconds(offer) > 0) return offer;
+    }
+    return null;
+  }
+
+  void _fitOffer(Json offer) {
+    if (!mounted || !mapReady) return;
+    controller.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints([
+          point(offer['pickup']),
+          point(offer['destination']),
+          if (myLocation != null) myLocation!,
+        ]),
+        padding: const EdgeInsets.fromLTRB(55, 65, 55, 55),
+        maxZoom: 17,
+      ),
+    );
+  }
+
   @override
   void didUpdateWidget(covariant RideMap old) {
     super.didUpdateWidget(old);
     _syncCaptain();
     _syncNearby();
+    final offer = _offerPreview;
+    final offerId = offer?['offer_id']?.toString();
+    if (offerId != _previewOfferId) {
+      _previewOfferId = offerId;
+      if (offer != null) {
+        _followOwnLocation = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _fitOffer(offer));
+      }
+    }
     if (b.captain && b.position != null) {
       final next = LatLng(b.position!.latitude, b.position!.longitude);
       if (_ownLocationTarget != next) {
@@ -1344,11 +1390,29 @@ class _RideMapState extends State<RideMap>
                   AppText(
                     r['coupon_reward_type'] == 'free_ride'
                         ? 'رحلة مجانية للزبون؛ تحصل على يوم اشتراك إضافي بعد إكمالها'
-                        : 'الوصول حوالي ${((r['eta_s'] as num) / 60).ceil()} دقيقة · ${amount(r['fare'])}',
+                        : 'الوصول حوالي ${((r['eta_s'] as num? ?? 0) / 60).ceil()} دقيقة · ${amount(r['fare'])}',
                   ),
                   const SizedBox(height: 8),
                   RoundTripSummary(ride: r),
-                  RidePlaces(ride: r),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.person_outline),
+                    ),
+                    title: AppText('${r['customer_name'] ?? 'الزبون'}'),
+                    subtitle: r['customer_phone'] == null
+                        ? null
+                        : AppText('${r['customer_phone']}'),
+                  ),
+                  RidePlaces(
+                    ride: r,
+                    onPlace: (origin) => showRidePlace(r, origin),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _fitOffer(r),
+                    icon: const Icon(Icons.route_outlined),
+                    label: const AppText('عرض الانطلاق والوصول على الخريطة'),
+                  ),
                   const SizedBox(height: 8),
                   fareBreakdown(r),
                   AppText('باقي ${b.offerSeconds(r)} ثانية للقبول'),
@@ -1998,16 +2062,18 @@ class _RideMapState extends State<RideMap>
   Widget build(BuildContext context) {
     PreferencesScope.of(context);
     final r = b.activeRide;
-    final routeVisible = showTripRoute(
-      captainView: b.captain,
-      status: r?['status'] as String?,
-    );
+    final offerPreview = _offerPreview;
+    final routeVisible =
+        offerPreview != null ||
+        showTripRoute(captainView: b.captain, status: r?['status'] as String?);
     final navigation = TripNavigation.shared(r);
     final rawGeometry =
         navigation?['geometry'] ??
         (r?['status'] == 'accepted' || r?['status'] == 'arrived'
             ? null
-            : r?['geometry'] ?? quote?['geometry']);
+            : r?['geometry'] ??
+                  offerPreview?['geometry'] ??
+                  quote?['geometry']);
     if (!sameSnapshot(_routeGeometry, rawGeometry)) {
       _routeGeometry = rawGeometry;
       _routePoints = geometry(rawGeometry);
@@ -2021,6 +2087,18 @@ class _RideMapState extends State<RideMap>
       if (progress.distanceToRoute <= 45) route = progress.points;
     }
     final markers = <Marker>[
+      if (offerPreview != null)
+        for (final origin in [true, false])
+          Marker(
+            point: point(offerPreview[origin ? 'pickup' : 'destination']),
+            width: 150,
+            height: 100,
+            alignment: Alignment.topCenter,
+            child: RideEndpointMarker(
+              pickup: origin,
+              onTap: () => showRidePlace(offerPreview, origin),
+            ),
+          ),
       if (myLocation != null || (b.captain && b.position != null))
         Marker(
           point: b.captain && b.position != null
@@ -2110,6 +2188,8 @@ class _RideMapState extends State<RideMap>
                               r['geometry'],
                         );
                       }
+                    } else if (offerPreview != null) {
+                      _fitOffer(offerPreview);
                     } else if (myLocation != null) {
                       controller.move(pickup, 17);
                     }

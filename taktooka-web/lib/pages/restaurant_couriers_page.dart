@@ -1,3 +1,4 @@
+import 'package:taktooka/services/refresh_gate.dart';
 import 'package:taktooka/services/page_snapshot_cache.dart';
 import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/core/design.dart' show money;
@@ -57,7 +58,10 @@ class _RestaurantCouriersPageState extends State<RestaurantCouriersPage> {
     super.dispose();
   }
 
-  Future<void> load() async {
+  final _manualRefreshGate = RefreshGate();
+  Future<void> load() => _manualRefreshGate.run((_) => _loadOnce());
+
+  Future<void> _loadOnce() async {
     if (fetching || busy) return;
     fetching = true;
     final session = widget.b.cacheEpoch;
@@ -411,6 +415,7 @@ class _RestaurantCouriersPageState extends State<RestaurantCouriersPage> {
         : RefreshIndicator(
             onRefresh: load,
             child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(20),
               children: [
                 if (busy) const SkeletonActivity(),

@@ -28,6 +28,7 @@ class NotificationsPage extends StatelessWidget {
       builder: (_, __) => RefreshIndicator(
         onRefresh: center.load,
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
           children: [
             if (center.inboxError != null)

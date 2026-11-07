@@ -1,3 +1,4 @@
+import 'package:taktooka/services/refresh_gate.dart';
 import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/core/numeric_localizations.dart';
 import 'dart:async';
@@ -74,7 +75,10 @@ class _RecoveryChatState extends State<RecoveryChat> {
     }
   }
 
-  Future<void> load() async {
+  final _manualRefreshGate = RefreshGate();
+  Future<void> load() => _manualRefreshGate.run((_) => _loadOnce());
+
+  Future<void> _loadOnce() async {
     if (thread == null || reading) return;
     reading = true;
     try {
@@ -157,26 +161,30 @@ class _RecoveryChatState extends State<RecoveryChat> {
         Expanded(
           child: initialLoading
               ? const SkeletonPage()
-              : ListView.builder(
-                  reverse: true,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
-                  itemBuilder: (context, i) {
-                    final m = messages[i];
-                    return Align(
-                      alignment: m['is_admin'] == true
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: AppText(
-                            '${m['is_admin'] == true ? 'الدعم' : 'أنت'}: ${m['body']}',
+              : RefreshIndicator(
+                  onRefresh: load,
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    reverse: true,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: messages.length,
+                    itemBuilder: (context, i) {
+                      final m = messages[i];
+                      return Align(
+                        alignment: m['is_admin'] == true
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: AppText(
+                              '${m['is_admin'] == true ? 'الدعم' : 'أنت'}: ${m['body']}',
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
         ),
         SafeArea(

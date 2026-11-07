@@ -14,3 +14,10 @@ bool restaurantIsOpen(Map restaurant, {DateTime? now}) {
   }
   return true;
 }
+
+bool catalogMealAvailable(Map meal, {DateTime? now}) =>
+    meal['available'] != false &&
+    restaurantIsOpen({
+      'open': meal['restaurant_open'],
+      'closing_time': meal['restaurant_closing_time'],
+    }, now: now);

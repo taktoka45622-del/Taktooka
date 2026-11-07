@@ -9,8 +9,6 @@ class TileViewport {
 
   TileViewport(this.zoom, this.bounds);
 
-  /// indicates whether this viewport contains any part of
-  /// the given tile
   bool overlaps(TileIdentity tile) {
     if (tile.z == zoom) {
       return bounds.contains(Offset(tile.x.toDouble(), tile.y.toDouble()));

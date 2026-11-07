@@ -1,3 +1,4 @@
+import 'package:taktooka/services/refresh_gate.dart';
 import 'package:taktooka/services/food_contact.dart';
 
 import 'dart:async';
@@ -109,7 +110,10 @@ class _FoodTrackingPageState extends State<FoodTrackingPage>
     super.dispose();
   }
 
-  Future<void> load() async {
+  final _manualRefreshGate = RefreshGate();
+  Future<void> load() => _manualRefreshGate.run((_) => _loadOnce());
+
+  Future<void> _loadOnce() async {
     if (fetching) return;
     fetching = true;
     try {
@@ -334,7 +338,16 @@ class _FoodTrackingPageState extends State<FoodTrackingPage>
       );
     }
     return Scaffold(
-      appBar: AppBar(title: Text(mine ? 'خريطة توصيل الطلب' : 'تتبّع مندوبك')),
+      appBar: AppBar(
+        title: Text(mine ? 'خريطة توصيل الطلب' : 'تتبّع مندوبك'),
+        actions: [
+          IconButton(
+            tooltip: 'تحديث البيانات',
+            onPressed: load,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           if (error != null)
@@ -386,7 +399,10 @@ class _FoodTrackingPageState extends State<FoodTrackingPage>
                           marker(
                             customer!,
                             Icons.location_on,
-                            mine ? 'الزبون' : 'عنوانك',
+                            order['customer_id'] ==
+                                    widget.b.db.auth.currentUser?.id
+                                ? 'عنوانك'
+                                : 'عنوان الزبون',
                             Colors.blue,
                           ),
                       ],
@@ -435,7 +451,7 @@ class _FoodTrackingPageState extends State<FoodTrackingPage>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    foodStates[order['status']] ?? 'جار تحميل الطلب',
+                    foodStatusForViewer(order, widget.b),
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,

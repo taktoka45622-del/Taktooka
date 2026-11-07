@@ -1,3 +1,4 @@
+import 'package:taktooka/services/restaurant_availability.dart';
 import 'persistent_media_image.dart';
 import 'package:taktooka/services/restaurant_range.dart';
 import 'package:taktooka/services/media_url.dart';
@@ -115,6 +116,14 @@ class FavoriteRestaurants extends StatelessWidget {
                                   ),
                                 ],
                               ),
+                              if (!restaurantIsOpen(r))
+                                const Text(
+                                  'مغلق حاليًا',
+                                  style: TextStyle(
+                                    color: Colors.orange,
+                                    fontSize: 11,
+                                  ),
+                                ),
                               const SizedBox(height: 8),
                               Text(
                                 r['name'] ?? '',

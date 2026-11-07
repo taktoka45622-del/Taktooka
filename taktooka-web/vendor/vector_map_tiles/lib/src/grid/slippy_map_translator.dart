@@ -3,22 +3,14 @@ import 'dart:math';
 import '../tile_identity.dart';
 
 class TileTranslation {
-  /// the original tile
   final TileIdentity original;
 
-  /// the tile from which the original tile data should be sourced
   final TileIdentity translated;
 
-  /// the denominator of the fraction along a one-dimensional axis
-  /// for example, one zoom level up the `fraction` would be 2.
-  /// 2 levels up would be 4, etc.
-  /// a `fraction` of 1 indicates that no translation is needed
   final int fraction;
 
-  /// the offset into the translated tile, starting at 0
   final int xOffset;
 
-  /// the offset into the translated tile, starting at 0
   final int yOffset;
 
   int get zoomDifference => original.z.toInt() - translated.z.toInt();
@@ -33,10 +25,6 @@ class TileTranslation {
         yOffset = 0;
 }
 
-/// Translates tiles to a fragment of a tile at a lower zoom level
-/// ref: https://en.wikipedia.org/wiki/Tiled_web_map
-/// ref: https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
-/// ref: https://developers.planet.com/tutorials/slippy-maps-101/
 class SlippyMapTranslator {
   final int maxZoom;
   SlippyMapTranslator(this.maxZoom);

@@ -12,7 +12,7 @@ import 'package:taktooka/core/design.dart';
 import 'package:taktooka/core/feature_navigation.dart';
 import 'package:taktooka/core/gender_copy.dart';
 import 'package:taktooka/services/backend.dart';
-import 'package:taktooka/widgets/prize_wheel_entry.dart';
+import 'package:taktooka/pages/prize_wheel_page.dart';
 import 'package:taktooka/widgets/ticket_divider.dart';
 
 class OffersPage extends StatefulWidget {
@@ -82,75 +82,80 @@ class _OffersPageState extends State<OffersPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.b.captain)
+      return PrizeWheelPage(backend: widget.b, embedded: true);
     final coupons = (widget.b.extras['coupon_history'] as List? ?? [])
         .map((e) => Json.from(e as Map))
         .toList();
     if (coupons.isEmpty && widget.b.coupon != null)
       coupons.add({...widget.b.coupon!, 'status': 'active'});
-    return ListView(
-      padding: const EdgeInsets.all(18),
-      children: [
-        if (widget.b.captain) ...[
-          PrizeWheelEntry(backend: widget.b, login: widget.login),
-          const SizedBox(height: 16),
-        ],
-        const SectionTitle('العروض والخصومات'),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                inputFormatters: const [EnglishDigitsFormatter()],
-                controller: code,
-                textDirection: TextDirection.ltr,
-                decoration: localizedInput(
-                  context,
-                  InputDecoration(
-                    hintText: 'أدخل رمز الخصم',
-                    prefixIcon: Icon(Icons.local_offer_outlined),
+    return RefreshIndicator(
+      onRefresh: widget.b.refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(18),
+        children: [
+          const SectionTitle('العروض والخصومات'),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  inputFormatters: const [EnglishDigitsFormatter()],
+                  controller: code,
+                  textDirection: TextDirection.ltr,
+                  decoration: localizedInput(
+                    context,
+                    InputDecoration(
+                      hintText: 'أدخل رمز الخصم',
+                      prefixIcon: Icon(Icons.local_offer_outlined),
+                    ),
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 88,
+                child: FilledButton(
+                  onPressed: busy ? null : () => applyCoupon(code.text.trim()),
+                  child: const AppText('تفعيل'),
+                ),
+              ),
+            ],
+          ),
+          if (busy) const SkeletonActivity(),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: AppText(error!, style: const TextStyle(color: scarlet)),
             ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 88,
-              child: FilledButton(
-                onPressed: busy ? null : () => applyCoupon(code.text.trim()),
-                child: const AppText('تفعيل'),
+          const SizedBox(height: 26),
+          for (final c in coupons)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: couponCard(c),
+            ),
+          if (coupons.isEmpty)
+            const PaperCard(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 30),
+                child: Column(
+                  children: [
+                    CategoryIcon(Icons.local_offer, size: 64),
+                    SizedBox(height: 16),
+                    AppText(
+                      'ماكو عروض مفعّلة حاليًا',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 19,
+                      ),
+                    ),
+                    AppText('عندك كود؟ فعّله هنا للرحلة القادمة'),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
-        if (busy) const SkeletonActivity(),
-        if (error != null)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: AppText(error!, style: const TextStyle(color: scarlet)),
-          ),
-        const SizedBox(height: 26),
-        for (final c in coupons)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: couponCard(c),
-          ),
-        if (coupons.isEmpty)
-          const PaperCard(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 30),
-              child: Column(
-                children: [
-                  CategoryIcon(Icons.local_offer, size: 64),
-                  SizedBox(height: 16),
-                  AppText(
-                    'ماكو عروض مفعّلة حاليًا',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19),
-                  ),
-                  AppText('عندك كود؟ فعّله هنا للرحلة القادمة'),
-                ],
-              ),
-            ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 

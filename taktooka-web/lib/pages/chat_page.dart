@@ -61,6 +61,12 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    final roomId = widget.room ?? widget.b.db.auth.currentUser?.id;
+    if (roomId == null) {
+      loading = false;
+      error = 'يرجى تسجيل الدخول لفتح الدعم';
+      return;
+    }
     selectedOrder = widget.orderId;
     final snapshot = PageSnapshotCache.read(
       widget.b,
@@ -89,7 +95,7 @@ class _ChatPageState extends State<ChatPage> {
           filter: PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
             column: 'user_id',
-            value: widget.room ?? widget.b.db.auth.currentUser!.id,
+            value: roomId,
           ),
           callback: (_) => load(),
         )
@@ -105,7 +111,9 @@ class _ChatPageState extends State<ChatPage> {
     super.dispose();
   }
 
-  Future<void> load() => _loadGate.run((_) => _loadOnce());
+  Future<void> load() => _loadGate.run((_) async {
+    await Future.wait([_loadOnce(), loadContext()]);
+  });
 
   Future<void> _loadOnce() async {
     if (!mounted) return;
@@ -263,85 +271,89 @@ class _ChatPageState extends State<ChatPage> {
       if (loading && messages.isEmpty) const TuktukLoader(),
       if (error != null) TextButton(onPressed: load, child: AppText(error!)),
       Expanded(
-        child: ListView.builder(
-          controller: scroll,
-          padding: const EdgeInsets.all(16),
-          itemCount: messages.length,
-          itemBuilder: (_, i) {
-            final m = messages[i];
-            final own = m['sender_id'] == widget.b.db.auth.currentUser?.id;
-            return Align(
-              alignment: own ? Alignment.centerRight : Alignment.centerLeft,
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 300),
-                margin: const EdgeInsets.symmetric(vertical: 5),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: own
-                      ? brandRed
-                      : Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AppText(
-                      m['is_admin'] ? 'الدعم' : 'المستخدم',
-                      style: TextStyle(
-                        color: own ? Colors.white70 : Colors.grey,
-                        fontSize: 10,
-                      ),
-                    ),
-                    if (m['context'] is Map &&
-                        (m['context']['subject'] == 'طلب طعام'))
-                      Text(
-                        'طلب #${foodOrderNumber(m['context']['order'] as Map? ?? {})}',
+        child: RefreshIndicator(
+          onRefresh: load,
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            controller: scroll,
+            padding: const EdgeInsets.all(16),
+            itemCount: messages.length,
+            itemBuilder: (_, i) {
+              final m = messages[i];
+              final own = m['sender_id'] == widget.b.db.auth.currentUser?.id;
+              return Align(
+                alignment: own ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 300),
+                  margin: const EdgeInsets.symmetric(vertical: 5),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: own
+                        ? brandRed
+                        : Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AppText(
+                        m['is_admin'] ? 'الدعم' : 'المستخدم',
                         style: TextStyle(
                           color: own ? Colors.white70 : Colors.grey,
-                          fontSize: 12,
+                          fontSize: 10,
                         ),
                       ),
-                    AppText(
-                      m['body'],
-                      style: TextStyle(
-                        color: own
-                            ? Colors.white
-                            : Theme.of(context).colorScheme.onSurface,
-                        fontSize: 16,
-                      ),
-                    ),
-                    Wrap(
-                      children: [
-                        for (final phone in foodPhoneNumbers(
-                          '${m['body'] ?? ''}',
-                        ))
-                          TextButton.icon(
-                            onPressed: () => openFoodWhatsApp(
-                              phone,
-                              message: 'تكتوكة\n${m['body'] ?? ''}',
-                            ),
-                            icon: const Icon(Icons.chat_outlined, size: 17),
-                            label: Text('واتساب $phone'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: own
-                                  ? Colors.white
-                                  : const Color(0xff128c7e),
-                            ),
+                      if (m['context'] is Map &&
+                          (m['context']['subject'] == 'طلب طعام'))
+                        Text(
+                          'طلب #${foodOrderNumber(m['context']['order'] as Map? ?? {})}',
+                          style: TextStyle(
+                            color: own ? Colors.white70 : Colors.grey,
+                            fontSize: 12,
                           ),
-                      ],
-                    ),
-                    AppText(
-                      displayTime(m['created_at']),
-                      style: TextStyle(
-                        color: own ? Colors.white70 : Colors.grey,
-                        fontSize: 10,
+                        ),
+                      AppText(
+                        m['body'],
+                        style: TextStyle(
+                          color: own
+                              ? Colors.white
+                              : Theme.of(context).colorScheme.onSurface,
+                          fontSize: 16,
+                        ),
                       ),
-                    ),
-                  ],
+                      Wrap(
+                        children: [
+                          for (final phone in foodPhoneNumbers(
+                            '${m['body'] ?? ''}',
+                          ))
+                            TextButton.icon(
+                              onPressed: () => openFoodWhatsApp(
+                                phone,
+                                message: 'تكتوكة\n${m['body'] ?? ''}',
+                              ),
+                              icon: const Icon(Icons.chat_outlined, size: 17),
+                              label: Text('واتساب $phone'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: own
+                                    ? Colors.white
+                                    : const Color(0xff128c7e),
+                              ),
+                            ),
+                        ],
+                      ),
+                      AppText(
+                        displayTime(m['created_at']),
+                        style: TextStyle(
+                          color: own ? Colors.white70 : Colors.grey,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
       SafeArea(

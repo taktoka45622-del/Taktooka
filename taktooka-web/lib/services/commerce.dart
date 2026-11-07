@@ -229,3 +229,36 @@ const foodStates = {
   'delivered': 'تم التوصيل',
   'rejected': 'مرفوض',
 };
+
+String foodStatusForViewer(Json order, Backend backend) {
+  final status = order['status']?.toString() ?? '';
+  final uid = backend.db.auth.currentUser?.id;
+  if (uid != null && order['customer_id'] == uid) {
+    return switch (status) {
+      'accepted' => 'وافق الكابتن على توصيل طلبك',
+      'heading' => 'الكابتن متوجه لاستلام طلبك من المطعم',
+      'picked_up' => 'الكابتن بالطريق إليك',
+      'delivered' => 'تم توصيل طلبك',
+      _ => foodStates[status] ?? status,
+    };
+  }
+  if (uid != null && order['captain_id'] == uid) {
+    return switch (status) {
+      'accepted' => 'تم قبول طلب التوصيل',
+      'heading' => 'أنت بالطريق إلى المطعم',
+      'picked_up' => 'أنت بالطريق إلى الزبون',
+      _ => foodStates[status] ?? status,
+    };
+  }
+  if (backend.restaurantOwner) {
+    return switch (status) {
+      'pending' => 'طلب جديد بانتظار موافقتك',
+      'accepted' => 'وافق الكابتن على توصيل الطلب',
+      'heading' => 'الكابتن بالطريق إلى مطعمك',
+      'picked_up' => 'الكابتن بالطريق إلى الزبون',
+      'delivered' => 'تم توصيل الطلب إلى الزبون',
+      _ => foodStates[status] ?? status,
+    };
+  }
+  return foodStates[status] ?? status;
+}

@@ -102,7 +102,10 @@ class _LinesPageState extends State<LinesPage> {
     );
   }
 
-  Future<void> load() async {
+  final _manualRefreshGate = RefreshGate();
+  Future<void> load() => _manualRefreshGate.run((_) => _loadOnce());
+
+  Future<void> _loadOnce() async {
     if (fetching || !widget.b.loggedIn) {
       if (mounted && loading) setState(() => loading = false);
       return;

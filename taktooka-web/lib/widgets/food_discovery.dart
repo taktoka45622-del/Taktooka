@@ -1,3 +1,4 @@
+import 'package:taktooka/services/restaurant_availability.dart';
 import 'package:taktooka/widgets/skeleton.dart';
 import 'food_price_filter.dart';
 
@@ -22,6 +23,7 @@ const foodCatalogCategories = [
 class FoodDiscovery extends StatelessWidget {
   final List<Json> restaurants, meals;
   final Future<List<Json>> Function(String)? findMeals;
+  final VoidCallback? invalidateCache;
   final List<Json> favorites;
   final bool Function(Json)? isFavorite;
   final ValueChanged<Json>? toggleFavorite;
@@ -40,6 +42,7 @@ class FoodDiscovery extends StatelessWidget {
     this.toggleFavorite,
     required this.meals,
     this.findMeals,
+    this.invalidateCache,
     required this.selectedCategory,
     required this.area,
     required this.offers,
@@ -76,6 +79,7 @@ class FoodDiscovery extends StatelessWidget {
                     restaurants: restaurants,
                     openRestaurant: openRestaurant,
                     findMeals: findMeals,
+                    invalidateCache: invalidateCache,
                     photo: photo,
                     open: openMeal,
                   ),
@@ -184,6 +188,7 @@ class FoodDiscovery extends StatelessWidget {
                     restaurants: restaurants,
                     openRestaurant: openRestaurant,
                     findMeals: findMeals,
+                    invalidateCache: invalidateCache,
                     photo: photo,
                     open: openMeal,
                   ),
@@ -206,7 +211,9 @@ class FoodDiscovery extends StatelessWidget {
                 child: Card(
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
-                    onTap: () => openMeal(item),
+                    onTap: catalogMealAvailable(item)
+                        ? () => openMeal(item)
+                        : null,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -240,8 +247,21 @@ class FoodDiscovery extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 8),
                                 FilledButton(
-                                  onPressed: () => openMeal(item),
-                                  child: const Text('اطلب هسه'),
+                                  onPressed: catalogMealAvailable(item)
+                                      ? () => openMeal(item)
+                                      : null,
+                                  child: Text(
+                                    catalogMealAvailable(item)
+                                        ? 'اطلب هسه'
+                                        : item['available'] == false
+                                        ? 'غير متوفرة حاليًا'
+                                        : 'المطعم مغلق حاليًا',
+                                    style: catalogMealAvailable(item)
+                                        ? null
+                                        : const TextStyle(fontSize: 12),
+                                    maxLines: 2,
+                                    textAlign: TextAlign.center,
+                                  ),
                                 ),
                               ],
                             ),
@@ -300,16 +320,24 @@ class FoodDiscovery extends StatelessWidget {
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.circle,
-                            color: Colors.green,
+                            color: restaurantIsOpen(shop)
+                                ? Colors.green
+                                : Colors.orange,
                             size: 10,
                           ),
                           const SizedBox(width: 5),
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'مفتوح الآن',
-                              style: TextStyle(color: Colors.green),
+                              restaurantIsOpen(shop)
+                                  ? 'مفتوح الآن'
+                                  : 'المطعم مغلق حاليًا',
+                              style: TextStyle(
+                                color: restaurantIsOpen(shop)
+                                    ? Colors.green
+                                    : Colors.orange,
+                              ),
                             ),
                           ),
                           FilledButton(
@@ -394,6 +422,7 @@ class FoodSearchPage extends StatefulWidget {
   final List<Json> restaurants;
   final ValueChanged<Json>? openRestaurant;
   final Future<List<Json>> Function(String)? findMeals;
+  final VoidCallback? invalidateCache;
   final Widget Function(dynamic, {double height}) photo;
   final ValueChanged<Json> open;
   const FoodSearchPage({
@@ -403,6 +432,7 @@ class FoodSearchPage extends StatefulWidget {
     this.restaurants = const [],
     this.openRestaurant,
     this.findMeals,
+    this.invalidateCache,
     required this.photo,
     required this.open,
   });
@@ -424,6 +454,27 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
     super.initState();
     mode = widget.initialMode;
     fetch('');
+  }
+
+  Future<void> refresh() async {
+    timer?.cancel();
+    final current = ++revision;
+    widget.invalidateCache?.call();
+    try {
+      final result = await widget.findMeals?.call(query.trim());
+      if (mounted && current == revision)
+        setState(() {
+          if (result != null) remote = result;
+          loading = false;
+          error = null;
+        });
+    } catch (_) {
+      if (mounted && current == revision)
+        setState(() {
+          loading = false;
+          error = 'تعذر تحديث البحث؛ حاول مجددًا';
+        });
+    }
   }
 
   void fetch(String value) {
@@ -512,8 +563,11 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(17),
-        onTap: () =>
-            restaurant ? widget.openRestaurant?.call(item) : widget.open(item),
+        onTap: restaurant
+            ? () => widget.openRestaurant?.call(item)
+            : catalogMealAvailable(item)
+            ? () => widget.open(item)
+            : null,
         child: Padding(
           padding: const EdgeInsets.all(7),
           child: Row(
@@ -546,6 +600,18 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
                         fontSize: 16,
                       ),
                     ),
+                    if (restaurant && !restaurantIsOpen(item))
+                      const Text(
+                        'المطعم مغلق حاليًا',
+                        style: TextStyle(color: Colors.orange),
+                      ),
+                    if (!restaurant && !catalogMealAvailable(item))
+                      Text(
+                        item['available'] == false
+                            ? 'غير متوفرة حاليًا'
+                            : 'المطعم مغلق حاليًا',
+                        style: const TextStyle(color: Colors.orange),
+                      ),
                     if (!restaurant) ...[
                       const SizedBox(height: 3),
                       Text(
@@ -566,9 +632,11 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
                 height: 44,
                 child: IconButton.filledTonal(
                   tooltip: restaurant ? 'فتح المطعم' : 'إضافة الوجبة',
-                  onPressed: () => restaurant
-                      ? widget.openRestaurant?.call(item)
-                      : widget.open(item),
+                  onPressed: restaurant
+                      ? () => widget.openRestaurant?.call(item)
+                      : catalogMealAvailable(item)
+                      ? () => widget.open(item)
+                      : null,
                   style: IconButton.styleFrom(
                     backgroundColor: const Color(0xffffe9ed),
                   ),
@@ -713,15 +781,22 @@ class _FoodSearchPageState extends State<FoodSearchPage> {
           Expanded(
             child: loading && count == 0
                 ? const SkeletonPage()
-                : count == 0
-                ? const Center(child: Text('ماكو وجبات مطابقة للبحث'))
-                : ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    children: [
-                      for (final shop in visibleShops)
-                        resultCard(shop, restaurant: true),
-                      for (final item in visibleMeals) resultCard(item),
-                    ],
+                : RefreshIndicator(
+                    onRefresh: refresh,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      children: [
+                        if (count == 0)
+                          const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('ماكو وجبات مطابقة للبحث'),
+                          ),
+                        for (final shop in visibleShops)
+                          resultCard(shop, restaurant: true),
+                        for (final item in visibleMeals) resultCard(item),
+                      ],
+                    ),
                   ),
           ),
         ],

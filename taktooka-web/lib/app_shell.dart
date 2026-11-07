@@ -654,9 +654,16 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             label: uiText('الرحلات'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.local_offer_outlined),
-            selectedIcon: Icon(Icons.local_offer, color: red),
-            label: uiText('العروض'),
+            icon: Icon(
+              backend.captain
+                  ? Icons.casino_outlined
+                  : Icons.local_offer_outlined,
+            ),
+            selectedIcon: Icon(
+              backend.captain ? Icons.casino : Icons.local_offer,
+              color: red,
+            ),
+            label: uiText(backend.captain ? 'عجلة الجوائز' : 'العروض'),
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

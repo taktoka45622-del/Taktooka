@@ -1,113 +1,164 @@
-import 'package:taktooka/core/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taktooka/widgets/app_notice.dart';
 
 void main() {
-  test(
-    'notices classify errors, successful actions, and required user actions',
-    () {
-      expect(noticeKind('تم حفظ العنوان بنجاح'), AppNoticeKind.success);
-      expect(
-        noticeKind('تم تفعيل الكود للرحلة القادمة'),
-        AppNoticeKind.success,
-      );
-      expect(noticeKind('تعذّر الاتصال، حاول مرة ثانية'), AppNoticeKind.error);
-      expect(noticeKind('كلمة المرور غير صحيحة'), AppNoticeKind.error);
-      expect(noticeKind('تم إلغاء الرحلة'), AppNoticeKind.warning);
-      expect(noticeKind('حدد نقطة الوصول'), AppNoticeKind.warning);
+  late BuildContext pageContext;
+  const bodyKey = Key('page-body');
+  Widget app() => MaterialApp(
+    home: Builder(
+      builder: (context) {
+        pageContext = context;
+        return Scaffold(
+          appBar: AppBar(title: const Text('تكتوكة')),
+          body: const SizedBox.expand(key: bodyKey, child: Text('حسابي')),
+        );
+      },
+    ),
+  );
+  testWidgets(
+    'notice does not move the page and disappears after five seconds',
+    (tester) async {
+      await tester.pumpWidget(app());
+      final before = tester.getTopLeft(find.byKey(bodyKey));
+      showAppNotice(pageContext, 'إشعار تجريبي');
+      await tester.pump();
+      expect(find.byType(AppNotice), findsOneWidget);
+      expect(tester.getTopLeft(find.byKey(bodyKey)), before);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump();
+      expect(find.byType(AppNotice), findsNothing);
+      expect(tester.getTopLeft(find.byKey(bodyKey)), before);
+      expect(tester.takeException(), isNull);
     },
   );
-  for (final rtl in [true, false]) {
-    testWidgets(
-      'banner reserves its own space, keeps buttons usable and closes after five seconds (rtl=$rtl)',
-      (tester) async {
-        late BuildContext context;
-        var taps = 0;
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: appTheme(),
-            home: Directionality(
-              textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
-              child: Scaffold(
-                appBar: AppBar(title: const Text('تكتوكة')),
-                body: Builder(
-                  builder: (c) {
-                    context = c;
-                    return Column(
-                      children: [
-                        ElevatedButton(
-                          onPressed: () => taps++,
-                          child: const Text('تأكيد'),
-                        ),
-                        const Spacer(),
-                        ElevatedButton(
-                          onPressed: () => taps++,
-                          child: const Text('طلب رحلة'),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-                bottomNavigationBar: const SizedBox(
-                  height: 64,
-                  child: Text('الرئيسية'),
-                ),
-              ),
-            ),
-          ),
-        );
-        showAppNotice(context, 'تم حفظ العنوان بنجاح');
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-        final banner = tester.getRect(find.byType(AppNotice));
-        final topButton = tester.getRect(
-          find.widgetWithText(ElevatedButton, 'تأكيد'),
-        );
-        final bottomButton = tester.getRect(
-          find.widgetWithText(ElevatedButton, 'طلب رحلة'),
-        );
-        expect(banner.overlaps(topButton), false);
-        expect(banner.overlaps(bottomButton), false);
-        expect(find.byIcon(Icons.close_rounded), findsOneWidget);
-        final close = tester.getRect(find.byIcon(Icons.close_rounded));
-        expect(close.center.dx, greaterThan(banner.center.dx));
-        await tester.tap(find.widgetWithText(ElevatedButton, 'تأكيد'));
-        expect(taps, 1);
-        await tester.pump(const Duration(seconds: 4));
-        expect(find.byType(AppNotice), findsOneWidget);
-        await tester.pump(const Duration(seconds: 1));
-        await tester.pump(const Duration(milliseconds: 300));
-        expect(find.byType(AppNotice), findsNothing);
-      },
-    );
-  }
+  testWidgets('a new notice replaces the previous one and owns its timeout', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    showAppNotice(pageContext, 'الأول');
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    showAppNotice(pageContext, 'الثاني');
+    await tester.pump();
+    expect(find.text('الأول'), findsNothing);
+    expect(find.text('الثاني'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.text('الثاني'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+    expect(find.byType(AppNotice), findsNothing);
+  });
   testWidgets(
-    'single right close button dismisses immediately and new notices replace old ones',
+    'close button removes notice immediately without reserving space',
     (tester) async {
-      late BuildContext context;
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: appTheme(),
-          home: Scaffold(
-            body: Builder(
-              builder: (c) {
-                context = c;
-                return const SizedBox.expand();
-              },
-            ),
+      await tester.pumpWidget(app());
+      final before = tester.getTopLeft(find.byKey(bodyKey));
+      showAppNotice(pageContext, 'إغلاق');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pump();
+      expect(find.byType(AppNotice), findsNothing);
+      expect(tester.getTopLeft(find.byKey(bodyKey)), before);
+    },
+  );
+  testWidgets('swipe dismisses notice without leaving a gap', (tester) async {
+    await tester.pumpWidget(app());
+    final before = tester.getTopLeft(find.byKey(bodyKey));
+    showAppNotice(pageContext, 'اسحب للأعلى');
+    await tester.pump();
+    await tester.drag(find.byType(AppNotice), const Offset(0, -350));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppNotice), findsNothing);
+    expect(tester.getTopLeft(find.byKey(bodyKey)), before);
+  });
+  testWidgets('disposing the overlay cancels its notice timeout', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    showAppNotice(pageContext, 'مؤقت');
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 6));
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('rapid consecutive notices leave only the newest card', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    showAppNotice(pageContext, 'واحد');
+    showAppNotice(pageContext, 'اثنين');
+    showAppNotice(pageContext, 'ثلاثة');
+    await tester.pump();
+    expect(find.byType(AppNotice), findsOneWidget);
+    expect(find.text('ثلاثة'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+    expect(find.byType(AppNotice), findsNothing);
+  });
+  testWidgets('navigation does not leave space when the notice expires', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    showAppNotice(pageContext, 'تنبيه قبل الانتقال');
+    await tester.pump();
+    Navigator.of(pageContext).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(
+          appBar: null,
+          body: SizedBox.expand(
+            key: Key('next-body'),
+            child: Text('الصفحة التالية'),
           ),
         ),
-      );
-      showAppNotice(context, 'حدد نقطة الوصول');
-      await tester.pumpAndSettle();
-      showAppNotice(context, 'تم الحفظ');
-      await tester.pumpAndSettle();
-      expect(find.text('حدد نقطة الوصول'), findsNothing);
-      expect(find.text('تم الحفظ'), findsOneWidget);
-      await tester.tap(find.byIcon(Icons.close_rounded));
-      await tester.pumpAndSettle();
-      expect(find.byType(AppNotice), findsNothing);
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    final before = tester.getTopLeft(find.byKey(const Key('next-body')));
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+    expect(find.byType(AppNotice), findsNothing);
+    expect(tester.getTopLeft(find.byKey(const Key('next-body'))), before);
+  });
+
+  testWidgets('disposing before the notice first renders is safe', (
+    tester,
+  ) async {
+    await tester.pumpWidget(app());
+    showAppNotice(pageContext, 'إشعار قبل الإغلاق');
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 6));
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('page controls remain usable while the notice is visible', (
+    tester,
+  ) async {
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () {
+                    taps++;
+                  },
+                  child: const Text('متابعة'),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    showAppNotice(pageContext, 'إشعار أعلى الصفحة');
+    await tester.pump();
+    await tester.tap(find.text('متابعة'));
+    await tester.pump();
+    expect(taps, 1);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

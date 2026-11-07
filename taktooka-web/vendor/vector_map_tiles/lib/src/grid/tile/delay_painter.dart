@@ -30,9 +30,6 @@ class DelayPainterModel {
   }
 }
 
-// first paint and model changes cause rendering to occur with 0 opacity
-// if state is ready and rendered with 0 opacity, new rendering is sheduled
-// on a delay with fade to 1 opacity.
 class DelayPainter extends StatefulWidget {
   final DelayPainterModel model;
   final CustomPainter delegate;

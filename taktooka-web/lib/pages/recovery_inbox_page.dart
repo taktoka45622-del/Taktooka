@@ -44,7 +44,10 @@ class _RecoveryInboxState extends State<RecoveryInbox> {
     super.dispose();
   }
 
-  Future<void> load() async {
+  final _manualRefreshGate = RefreshGate();
+  Future<void> load() => _manualRefreshGate.run((_) => _loadOnce());
+
+  Future<void> _loadOnce() async {
     if (loading) return;
     loading = true;
     try {
@@ -77,6 +80,7 @@ class _RecoveryInboxState extends State<RecoveryInbox> {
     body: RefreshIndicator(
       onRefresh: load,
       child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         children: [
           if (error != null)
             TextButton(onPressed: load, child: AppText(error!)),

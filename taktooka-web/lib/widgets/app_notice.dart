@@ -53,7 +53,7 @@ AppNoticeKind noticeKind(String text) {
   return AppNoticeKind.warning;
 }
 
-final _noticeTimers = Expando<Timer>();
+final _activeNotices = Expando<VoidCallback>();
 
 void showAppNotice(
   BuildContext context,
@@ -61,43 +61,52 @@ void showAppNotice(
   AppNoticeKind? kind,
   ScaffoldMessengerState? messenger,
 }) {
-  final host = messenger ?? ScaffoldMessenger.of(context);
-  _noticeTimers[host]?.cancel();
-  host.clearMaterialBanners();
-  host.removeCurrentMaterialBanner();
+  if (!context.mounted) return;
+  final overlay = Overlay.maybeOf(context, rootOverlay: true);
+  if (overlay == null || !overlay.mounted) return;
+  _activeNotices[overlay]?.call();
   Timer? lifetime;
-  void close() {
-    if (!identical(_noticeTimers[host], lifetime)) return;
-    _noticeTimers[host]?.cancel();
-    _noticeTimers[host] = null;
-    if (host.mounted) host.removeCurrentMaterialBanner();
+  late final OverlayEntry entry;
+  var closed = false;
+  late final VoidCallback close;
+  void release() {
+    lifetime?.cancel();
+    if (identical(_activeNotices[overlay], close)) {
+      _activeNotices[overlay] = null;
+    }
   }
 
-  host.showMaterialBanner(
-    MaterialBanner(
-      backgroundColor: Colors.transparent,
-      surfaceTintColor: Colors.transparent,
-      dividerColor: Colors.transparent,
-      padding: const EdgeInsetsDirectional.only(start: 16, top: 4, bottom: 8),
-      minActionBarHeight: 0,
-      actions: const [SizedBox.shrink()],
-      content: _NoticeLifetime(
-        onDispose: () {
-          lifetime?.cancel();
-          if (identical(_noticeTimers[host], lifetime))
-            _noticeTimers[host] = null;
-        },
-        child: Dismissible(
-          key: UniqueKey(),
-          direction: DismissDirection.up,
-          onDismissed: (_) => close(),
-          child: AppNotice(message: message, kind: kind, onClose: close),
+  close = () {
+    if (closed) return;
+    closed = true;
+    release();
+    if (overlay.mounted) {
+      entry.remove();
+      entry.dispose();
+    }
+  };
+  entry = OverlayEntry(
+    builder: (overlayContext) => Positioned(
+      top: MediaQuery.paddingOf(overlayContext).top + kToolbarHeight + 4,
+      left: 16,
+      right: 16,
+      child: _NoticeLifetime(
+        onDispose: release,
+        child: Material(
+          color: Colors.transparent,
+          child: Dismissible(
+            key: UniqueKey(),
+            direction: DismissDirection.up,
+            onDismissed: (_) => close(),
+            child: AppNotice(message: message, kind: kind, onClose: close),
+          ),
         ),
       ),
     ),
   );
+  _activeNotices[overlay] = close;
+  overlay.insert(entry);
   lifetime = Timer(const Duration(seconds: 5), close);
-  _noticeTimers[host] = lifetime;
 }
 
 class AppNotice extends StatelessWidget {

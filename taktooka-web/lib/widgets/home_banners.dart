@@ -16,6 +16,14 @@ class HomeBanners extends StatefulWidget {
   final Backend backend;
   final Widget Function(BuildContext, List<Json>) builder;
   const HomeBanners({super.key, required this.backend, required this.builder});
+  static final _active = Expando<Set<_HomeBannersState>>();
+  static Future<void> refreshFor(Backend backend) async {
+    await Future.wait([
+      for (final state in _active[backend] ?? <_HomeBannersState>{})
+        state._load(force: true),
+    ]);
+  }
+
   @override
   State<HomeBanners> createState() => _HomeBannersState();
 }
@@ -47,6 +55,7 @@ class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    (HomeBanners._active[widget.backend] ??= {}).add(this);
     cache = FoodCatalogCache.forBackend(widget.backend)..addListener(changed);
     unawaited(seed());
     unawaited(_load());
@@ -56,9 +65,13 @@ class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _load() async {
+  final _loadGate = RefreshGate();
+  Future<void> _load({bool force = false}) =>
+      _loadGate.run((fresh) => _loadOnce(force: fresh), full: force);
+  Future<void> _loadOnce({bool force = false}) async {
     if (_loading ||
-        lastChecked != null &&
+        !force &&
+            lastChecked != null &&
             DateTime.now().difference(lastChecked!).inSeconds < 60)
       return;
     _loading = true;
@@ -105,6 +118,7 @@ class _HomeBannersState extends State<HomeBanners> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    HomeBanners._active[widget.backend]?.remove(this);
     cache.removeListener(changed);
     _refresh?.cancel();
     WidgetsBinding.instance.removeObserver(this);

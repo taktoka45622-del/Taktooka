@@ -1,3 +1,4 @@
+import 'package:taktooka/services/refresh_gate.dart';
 import 'package:taktooka/widgets/skeleton.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -16,7 +17,12 @@ import 'package:taktooka/widgets/wheel_face.dart';
 
 class PrizeWheelPage extends StatefulWidget {
   final Backend backend;
-  const PrizeWheelPage({super.key, required this.backend});
+  final bool embedded;
+  const PrizeWheelPage({
+    super.key,
+    required this.backend,
+    this.embedded = false,
+  });
   @override
   State<PrizeWheelPage> createState() => _PrizeWheelPageState();
 }
@@ -65,7 +71,10 @@ class _PrizeWheelPageState extends State<PrizeWheelPage>
     super.dispose();
   }
 
-  Future<void> _load() async {
+  final _refreshGate = RefreshGate();
+  Future<void> _load() => _refreshGate.run((_) => _loadOnce());
+
+  Future<void> _loadOnce() async {
     if (_busy) return;
     if (mounted) setState(() => _loading = true);
     try {
@@ -172,133 +181,141 @@ class _PrizeWheelPageState extends State<PrizeWheelPage>
     final countdown =
         '${(remaining ~/ 3600).toString().padLeft(2, '0')}:${((remaining % 3600) ~/ 60).toString().padLeft(2, '0')}:${(remaining % 60).toString().padLeft(2, '0')}';
     return Scaffold(
-      appBar: AppBar(title: const AppText('عجلة الجوائز')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-        children: [
-          AppText('لفّ العجلة وشوف جائزتك', style: heading(26)),
-          const SizedBox(height: 6),
-          const AppText(
-            'اللفة مجانية. إذا توجد جائزة متوفرة تربح جائزة، وإذا ماكو جوائز تطلع حظ أوفر.',
-          ),
-          const SizedBox(height: 8),
-          const AppText('لفة واحدة كل 3 أيام'),
-          const SizedBox(height: 20),
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 380),
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: AnimatedBuilder(
-                  animation: _motion,
-                  builder: (context, _) => WheelFace(angle: _angle),
-                ),
-              ),
+      appBar: widget.embedded
+          ? null
+          : AppBar(title: const AppText('عجلة الجوائز')),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+          children: [
+            AppText('لفّ العجلة وشوف جائزتك', style: heading(26)),
+            const SizedBox(height: 6),
+            const AppText(
+              'اللفة مجانية. إذا توجد جائزة متوفرة تربح جائزة، وإذا ماكو جوائز تطلع حظ أوفر.',
             ),
-          ),
-          const SizedBox(height: 18),
-          if (_loading) const SkeletonActivity(),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: AppText(_error!, style: const TextStyle(color: scarlet)),
-            ),
-          if (!_enabled && !_loading) const AppText('العجلة متوقفة مؤقتاً'),
-          SizedBox(
-            height: 54,
-            child: FilledButton.icon(
-              onPressed: _busy || _loading
-                  ? null
-                  : (_error != null && _pending == null
-                        ? () => _load()
-                        : ((_enabled && _eligible) || _pending != null
-                              ? _spin
-                              : null)),
-              icon: _busy
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: SkeletonActivity(height: 16),
-                    )
-                  : const Icon(Icons.rotate_right),
-              label: AppText(
-                _busy
-                    ? 'جاري اللف…'
-                    : (_pending != null
-                          ? 'استرجاع نتيجة اللفة'
-                          : (_error != null ? 'إعادة المحاولة' : 'لفّ العجلة')),
-              ),
-            ),
-          ),
-          if (!_eligible) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
+            const AppText('لفة واحدة كل 3 أيام'),
+            const SizedBox(height: 20),
             Center(
-              child: AppText(
-                '${uiText('اللفة القادمة بعد')} $countdown',
-                textDirection: TextDirection.ltr,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: AnimatedBuilder(
+                    animation: _motion,
+                    builder: (context, _) => WheelFace(angle: _angle),
+                  ),
+                ),
               ),
             ),
-          ],
-          if (_result != null) ...[
-            const SizedBox(height: 16),
-            PaperCard(
-              child: Column(
-                children: [
-                  Icon(
-                    won ? Icons.emoji_events : Icons.favorite_border,
-                    color: won ? const Color(0xffd09d26) : muted,
-                    size: 40,
-                  ),
-                  AppText(
-                    won ? 'مبروك، ربحت جائزة!' : 'حظ أوفر',
-                    style: heading(24),
-                  ),
-                  if (won)
-                    AppText(
-                      _result!['prize_title'] as String,
-                      style: heading(20),
-                    ),
-                  if (won)
-                    const AppText(
-                      'جائزتك محفوظة. تواصل مع الدعم لتنسيق الاستلام.',
-                    ),
-                  if (won)
-                    AppText(
-                      '#${(_result!['id'] as String).substring(0, 8).toUpperCase()}',
-                      textDirection: TextDirection.ltr,
-                    ),
-                ],
+            const SizedBox(height: 18),
+            if (_loading) const SkeletonActivity(),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: AppText(_error!, style: const TextStyle(color: scarlet)),
+              ),
+            if (!_enabled && !_loading) const AppText('العجلة متوقفة مؤقتاً'),
+            SizedBox(
+              height: 54,
+              child: FilledButton.icon(
+                onPressed: _busy || _loading
+                    ? null
+                    : (_error != null && _pending == null
+                          ? () => _load()
+                          : ((_enabled && _eligible) || _pending != null
+                                ? _spin
+                                : null)),
+                icon: _busy
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: SkeletonActivity(height: 16),
+                      )
+                    : const Icon(Icons.rotate_right),
+                label: AppText(
+                  _busy
+                      ? 'جاري اللف…'
+                      : (_pending != null
+                            ? 'استرجاع نتيجة اللفة'
+                            : (_error != null
+                                  ? 'إعادة المحاولة'
+                                  : 'لفّ العجلة')),
+                ),
               ),
             ),
-          ],
-          if (_history.isNotEmpty) ...[
-            const SizedBox(height: 22),
-            AppText('سجل اللفات والجوائز', style: heading(20)),
-            for (final row in _history)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  row['prize_key'] == null
-                      ? Icons.rotate_right
-                      : Icons.emoji_events_outlined,
-                  color: scarlet,
-                ),
-                title: AppText(row['prize_title'] as String),
-                subtitle: AppText(
-                  row['status'] == 'pending'
-                      ? 'بانتظار التسليم'
-                      : row['status'] == 'delivered'
-                      ? 'تم التسليم'
-                      : 'حظ أوفر',
-                ),
-                trailing: AppText(
-                  '#${(row['id'] as String).substring(0, 8).toUpperCase()}',
-                  style: const TextStyle(fontSize: 11),
+            if (!_eligible) ...[
+              const SizedBox(height: 10),
+              Center(
+                child: AppText(
+                  '${uiText('اللفة القادمة بعد')} $countdown',
                   textDirection: TextDirection.ltr,
                 ),
               ),
+            ],
+            if (_result != null) ...[
+              const SizedBox(height: 16),
+              PaperCard(
+                child: Column(
+                  children: [
+                    Icon(
+                      won ? Icons.emoji_events : Icons.favorite_border,
+                      color: won ? const Color(0xffd09d26) : muted,
+                      size: 40,
+                    ),
+                    AppText(
+                      won ? 'مبروك، ربحت جائزة!' : 'حظ أوفر',
+                      style: heading(24),
+                    ),
+                    if (won)
+                      AppText(
+                        _result!['prize_title'] as String,
+                        style: heading(20),
+                      ),
+                    if (won)
+                      const AppText(
+                        'جائزتك محفوظة. تواصل مع الدعم لتنسيق الاستلام.',
+                      ),
+                    if (won)
+                      AppText(
+                        '#${(_result!['id'] as String).substring(0, 8).toUpperCase()}',
+                        textDirection: TextDirection.ltr,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            if (_history.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              AppText('سجل اللفات والجوائز', style: heading(20)),
+              for (final row in _history)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    row['prize_key'] == null
+                        ? Icons.rotate_right
+                        : Icons.emoji_events_outlined,
+                    color: scarlet,
+                  ),
+                  title: AppText(row['prize_title'] as String),
+                  subtitle: AppText(
+                    row['status'] == 'pending'
+                        ? 'بانتظار التسليم'
+                        : row['status'] == 'delivered'
+                        ? 'تم التسليم'
+                        : 'حظ أوفر',
+                  ),
+                  trailing: AppText(
+                    '#${(row['id'] as String).substring(0, 8).toUpperCase()}',
+                    style: const TextStyle(fontSize: 11),
+                    textDirection: TextDirection.ltr,
+                  ),
+                ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

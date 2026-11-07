@@ -1,3 +1,5 @@
+import 'package:taktooka/services/refresh_gate.dart';
+import 'package:taktooka/widgets/food_restaurant_payment.dart';
 import 'package:taktooka/widgets/skeleton.dart';
 import 'package:taktooka/services/food_contact.dart';
 import 'package:taktooka/widgets/persistent_media_image.dart';
@@ -101,7 +103,10 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
     });
   }
 
-  Future<void> load() async {
+  final _manualRefreshGate = RefreshGate();
+  Future<void> load() => _manualRefreshGate.run((_) => _loadOnce());
+
+  Future<void> _loadOnce() async {
     try {
       final value = Json.from(
         await commerceRpc(widget.b, 'order_details', {'id': order['id']})
@@ -315,249 +320,267 @@ class _FoodOrderDetailsPageState extends State<FoodOrderDetailsPage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          if (loading || busy) const SkeletonActivity(),
-          if (!isCourier && !widget.b.restaurantOwner) customerTimeline(),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  CommerceStatus(
-                    foodStates[order['status']] ?? '${order['status']}',
-                  ),
-                  const SizedBox(height: 12),
-                  if (isCourier)
-                    const Text('أجرة التوصيل', style: TextStyle(color: muted)),
-                  if (isCourier)
-                    Text(
-                      money(order['delivery_fee']),
-                      style: const TextStyle(
-                        fontSize: 30,
-                        color: scarlet,
-                        fontWeight: FontWeight.bold,
+      body: RefreshIndicator(
+        onRefresh: load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          children: [
+            if (loading || busy) const SkeletonActivity(),
+            if (!isCourier && !widget.b.restaurantOwner) customerTimeline(),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    CommerceStatus(foodStatusForViewer(order, widget.b)),
+                    const SizedBox(height: 12),
+                    if (isCourier)
+                      const Text(
+                        'أجرة التوصيل',
+                        style: TextStyle(color: muted),
                       ),
-                    ),
-                  Text('رقم الطلب: #${foodOrderNumber(order)}'),
-                  const SizedBox(height: 8),
-                  if (isCourier || widget.b.restaurantOwner)
-                    Text(
-                      order['delivery_mode'] == 'private'
-                          ? 'مندوب خاص بالمطعم'
-                          : 'مندوب تكتوكة عام',
-                    ),
-                ],
+                    if (isCourier)
+                      Text(
+                        money(order['delivery_fee']),
+                        style: const TextStyle(
+                          fontSize: 30,
+                          color: scarlet,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    Text('رقم الطلب: #${foodOrderNumber(order)}'),
+                    const SizedBox(height: 8),
+                    if (isCourier || widget.b.restaurantOwner)
+                      Text(
+                        order['delivery_mode'] == 'private'
+                            ? 'مندوب خاص بالمطعم'
+                            : 'مندوب تكتوكة عام',
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          if (shop != null &&
-              customer != null &&
-              (active || isCourier || widget.b.restaurantOwner))
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: SizedBox(
-                height: 240,
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCameraFit: CameraFit.bounds(
-                      bounds: LatLngBounds.fromPoints([shop, customer]),
-                      padding: const EdgeInsets.all(48),
+            const SizedBox(height: 12),
+            if (shop != null &&
+                customer != null &&
+                (active || isCourier || widget.b.restaurantOwner))
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  height: 240,
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCameraFit: CameraFit.bounds(
+                        bounds: LatLngBounds.fromPoints([shop, customer]),
+                        padding: const EdgeInsets.all(48),
+                      ),
+                      interactionOptions: const InteractionOptions(
+                        flags: InteractiveFlag.drag | InteractiveFlag.pinchZoom,
+                      ),
                     ),
-                    interactionOptions: const InteractionOptions(
-                      flags: InteractiveFlag.drag | InteractiveFlag.pinchZoom,
-                    ),
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.taktooka.app',
-                      maxNativeZoom: 19,
-                      maxZoom: 19,
-                    ),
-                    PolylineLayer(
-                      polylines: [
-                        Polyline(
-                          points: [shop, customer],
-                          color: scarlet.withValues(alpha: .65),
-                          strokeWidth: 3,
-                        ),
-                      ],
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: shop,
-                          width: 48,
-                          height: 48,
-                          child: const Icon(
-                            Icons.storefront,
-                            color: scarlet,
-                            size: 36,
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.taktooka.app',
+                        maxNativeZoom: 19,
+                        maxZoom: 19,
+                      ),
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: [shop, customer],
+                            color: scarlet.withValues(alpha: .65),
+                            strokeWidth: 3,
                           ),
-                        ),
-                        Marker(
-                          point: customer,
-                          width: 48,
-                          height: 48,
-                          child: const Icon(
-                            Icons.location_on,
-                            color: Colors.blue,
-                            size: 40,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Align(
-                      alignment: Alignment.bottomLeft,
-                      child: Padding(
-                        padding: EdgeInsets.all(4),
-                        child: ColoredBox(
-                          color: Color(0xDFFFFFFF),
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 2,
+                        ],
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: shop,
+                            width: 48,
+                            height: 48,
+                            child: const Icon(
+                              Icons.storefront,
+                              color: scarlet,
+                              size: 36,
                             ),
-                            child: Text(
-                              '© OpenStreetMap',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.black87,
+                          ),
+                          Marker(
+                            point: customer,
+                            width: 48,
+                            height: 48,
+                            child: const Icon(
+                              Icons.location_on,
+                              color: Colors.blue,
+                              size: 40,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Align(
+                        alignment: Alignment.bottomLeft,
+                        child: Padding(
+                          padding: EdgeInsets.all(4),
+                          child: ColoredBox(
+                            color: Color(0xDFFFFFFF),
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              child: Text(
+                                '© OpenStreetMap',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.black87,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+            if (active)
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        FoodTrackingPage(b: widget.b, orderId: order['id']),
+                  ),
+                ),
+                icon: const Icon(Icons.route_outlined),
+                label: const Text('فتح التتبع المباشر'),
+              ),
+            const SizedBox(height: 12),
+            if (!widget.b.restaurantOwner) ...[
+              party(
+                'المطعم — نقطة الاستلام',
+                order['restaurant_name'] ?? '',
+                order['restaurant_phone'],
+                order['restaurant_address'] ?? '',
+                shop,
+                scarlet,
+                Icons.storefront_outlined,
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (isCourier || widget.b.restaurantOwner)
+              party(
+                'الزبون — نقطة التسليم',
+                order['customer_name'] ?? 'الزبون',
+                order['customer_phone'],
+                order['customer_address'] ?? '',
+                customer,
+                Colors.blue,
+                Icons.person_outline,
+              ),
+            if (order['captain_id'] != null)
+              party(
+                'الكابتن',
+                order['captain_name'] ?? 'الكابتن',
+                order['captain_phone'],
+                '',
+                null,
+                Colors.blue,
+                Icons.delivery_dining,
+              ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('تفاصيل الحساب', style: heading(18)),
+                    if (isCourier || widget.b.restaurantOwner)
+                      FoodRestaurantPayment(
+                        paidAt: order['restaurant_paid_at'],
+                        showUnpaid:
+                            order['captain_id'] ==
+                                widget.b.db.auth.currentUser?.id &&
+                            order['status'] == 'delivered',
+                      ),
+                    for (final item in order['items'] as List? ?? [])
+                      FoodOrderItem(item: Json.from(item), photo: photo),
+                    const Divider(),
+                    CommerceAmountRow(
+                      isCourier ? 'فلوس المطعم' : 'الطعام',
+                      order['food_total'] as num,
+                    ),
+                    if (isCourier)
+                      CommerceAmountRow(
+                        'أجور التوصيل إلك',
+                        ((order['delivery_fee'] as num) - courierCommission),
+                      ),
+                    CommerceAmountRow(
+                      'أجرة التوصيل',
+                      order['delivery_fee'] as num,
+                    ),
+                    CommerceAmountRow(
+                      'رسوم الخدمة',
+                      order['service_fee'] as num,
+                    ),
+                    CommerceAmountRow(
+                      isCourier
+                          ? 'الكاش المطلوب من الزبون'
+                          : 'المبلغ المطلوب مع التوصيل',
+                      (order['food_total'] as num) +
+                          (order['delivery_fee'] as num) +
+                          (order['service_fee'] as num),
+                      total: true,
                     ),
                   ],
                 ),
               ),
             ),
-          if (active)
-            OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      FoodTrackingPage(b: widget.b, orderId: order['id']),
-                ),
-              ),
-              icon: const Icon(Icons.route_outlined),
-              label: const Text('فتح التتبع المباشر'),
-            ),
-          const SizedBox(height: 12),
-          party(
-            'المطعم — نقطة الاستلام',
-            order['restaurant_name'] ?? '',
-            order['restaurant_phone'],
-            order['restaurant_address'] ?? '',
-            shop,
-            scarlet,
-            Icons.storefront_outlined,
-          ),
-          const SizedBox(height: 12),
-          if (isCourier || widget.b.restaurantOwner)
-            party(
-              'الزبون — نقطة التسليم',
-              order['customer_name'] ?? 'الزبون',
-              order['customer_phone'],
-              order['customer_address'] ?? '',
-              customer,
-              Colors.blue,
-              Icons.person_outline,
-            ),
-          if (order['captain_id'] != null)
-            party(
-              'الكابتن',
-              order['captain_name'] ?? 'الكابتن',
-              order['captain_phone'],
-              '',
-              null,
-              Colors.blue,
-              Icons.delivery_dining,
-            ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('تفاصيل الحساب', style: heading(18)),
-                  for (final item in order['items'] as List? ?? [])
-                    FoodOrderItem(item: Json.from(item), photo: photo),
-                  const Divider(),
-                  CommerceAmountRow(
-                    isCourier ? 'فلوس المطعم' : 'الطعام',
-                    order['food_total'] as num,
-                  ),
-                  if (isCourier)
-                    CommerceAmountRow(
-                      'أجور التوصيل إلك',
-                      ((order['delivery_fee'] as num) - courierCommission),
+            if (!isCourier && !widget.b.restaurantOwner)
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => Scaffold(
+                      appBar: AppBar(title: const Text('دعم تكتوكة')),
+                      body: ChatPage(b: widget.b, orderId: order['id']),
                     ),
-                  CommerceAmountRow(
-                    'أجرة التوصيل',
-                    order['delivery_fee'] as num,
-                  ),
-                  CommerceAmountRow('رسوم الخدمة', order['service_fee'] as num),
-                  CommerceAmountRow(
-                    isCourier
-                        ? 'الكاش المطلوب من الزبون'
-                        : 'المبلغ المطلوب مع التوصيل',
-                    (order['food_total'] as num) +
-                        (order['delivery_fee'] as num) +
-                        (order['service_fee'] as num),
-                    total: true,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (!isCourier && !widget.b.restaurantOwner)
-            OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    appBar: AppBar(title: const Text('دعم تكتوكة')),
-                    body: ChatPage(b: widget.b, orderId: order['id']),
                   ),
                 ),
+                icon: const Icon(Icons.headset_mic_outlined),
+                label: const Text('تواصل مع دعم تكتوكة'),
               ),
-              icon: const Icon(Icons.headset_mic_outlined),
-              label: const Text('تواصل مع دعم تكتوكة'),
-            ),
-          if (error != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text(error!, style: const TextStyle(color: Colors.red)),
-            ),
-          if (isCourier && order['status'] == 'searching') ...[
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: busy || loading || error != null || secondsLeft <= 0
-                  ? null
-                  : accept,
-              child: Text(
-                busy
-                    ? 'جار قبول الطلب…'
-                    : secondsLeft <= 0
-                    ? 'انتهت مهلة القبول'
-                    : 'موافقة — ${secondsLeft ~/ 60}:${(secondsLeft % 60).toString().padLeft(2, '0')}',
+            if (error != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(error!, style: const TextStyle(color: Colors.red)),
               ),
-            ),
-            OutlinedButton(
-              onPressed: busy || secondsLeft <= 0 ? null : decline,
-              child: const Text('إلغاء'),
-            ),
+            if (isCourier && order['status'] == 'searching') ...[
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: busy || loading || error != null || secondsLeft <= 0
+                    ? null
+                    : accept,
+                child: Text(
+                  busy
+                      ? 'جار قبول الطلب…'
+                      : secondsLeft <= 0
+                      ? 'انتهت مهلة القبول'
+                      : 'موافقة — ${secondsLeft ~/ 60}:${(secondsLeft % 60).toString().padLeft(2, '0')}',
+                ),
+              ),
+              OutlinedButton(
+                onPressed: busy || secondsLeft <= 0 ? null : decline,
+                child: const Text('إلغاء'),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

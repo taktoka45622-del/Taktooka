@@ -10,6 +10,7 @@ class MealDetailsPage extends StatefulWidget {
   final Future<bool> Function() toggleFavorite;
   final Widget Function(dynamic, {double height}) photo;
   final Json? initial;
+  final Future<({Json meal, Json restaurant})> Function()? refreshData;
   const MealDetailsPage({
     super.key,
     required this.meal,
@@ -18,13 +19,15 @@ class MealDetailsPage extends StatefulWidget {
     required this.toggleFavorite,
     required this.photo,
     this.initial,
+    this.refreshData,
   });
   @override
   State<MealDetailsPage> createState() => _MealDetailsPageState();
 }
 
 class _MealDetailsPageState extends State<MealDetailsPage> {
-  late final List<Json> sizes, addons;
+  late List<Json> sizes, addons;
+  late Json _meal, _restaurant;
   late final TextEditingController notes;
   final Set<String> selected = {};
   String? sizeId;
@@ -35,7 +38,9 @@ class _MealDetailsPageState extends State<MealDetailsPage> {
   @override
   void initState() {
     super.initState();
-    final config = widget.meal['options'] as Map? ?? {};
+    _meal = widget.meal;
+    _restaurant = widget.restaurant;
+    final config = _meal['options'] as Map? ?? {};
     sizes = [for (final v in config['sizes'] as List? ?? []) Json.from(v)];
     addons = [for (final v in config['addons'] as List? ?? []) Json.from(v)];
     sizeId = sizes.isEmpty ? null : sizes.first['id'];
@@ -64,12 +69,37 @@ class _MealDetailsPageState extends State<MealDetailsPage> {
   List<Json> get extras =>
       addons.where((a) => selected.contains(a['id'])).toList();
   int get basePrice =>
-      (size?['price'] as num? ?? widget.meal['price'] as num).toInt();
+      (size?['price'] as num? ?? _meal['price'] as num).toInt();
   int get unitPrice =>
       basePrice +
       extras.fold<int>(0, (s, a) => s + (a['price'] as num).toInt());
   bool get available =>
-      widget.meal['available'] != false && restaurantIsOpen(widget.restaurant);
+      _meal['available'] != false && restaurantIsOpen(_restaurant);
+  Future<void> refresh() async {
+    final request = widget.refreshData;
+    if (request == null) return;
+    try {
+      final value = await request();
+      if (!mounted) return;
+      setState(() {
+        _meal = value.meal;
+        _restaurant = value.restaurant;
+        final config = _meal['options'] as Map? ?? {};
+        sizes = [for (final v in config['sizes'] as List? ?? []) Json.from(v)];
+        addons = [
+          for (final v in config['addons'] as List? ?? []) Json.from(v),
+        ];
+        if (!sizes.any((size) => size['id'] == sizeId))
+          sizeId = sizes.firstOrNull?['id'];
+        selected.removeWhere((id) => !addons.any((addon) => addon['id'] == id));
+        photoIndex = 0;
+        error = null;
+      });
+    } catch (_) {
+      if (mounted) setState(() => error = 'تعذر تحديث الوجبة؛ حاول مجددًا');
+    }
+  }
+
   Future<void> toggle() async {
     if (savingFavorite) return;
     setState(() => savingFavorite = true);
@@ -94,272 +124,283 @@ class _MealDetailsPageState extends State<MealDetailsPage> {
   );
   @override
   Widget build(BuildContext context) {
-    final images = List<String>.from(widget.meal['image_paths'] ?? []);
-    if (images.isEmpty) images.add(widget.meal['image_path'] ?? '');
+    final images = List<String>.from(_meal['image_paths'] ?? []);
+    if (images.isEmpty) images.add(_meal['image_path'] ?? '');
     return DismissKeyboardOnOutsideTap(
       child: Scaffold(
-        body: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Stack(
-                children: [
-                  SizedBox(
-                    height:
-                        MediaQuery.sizeOf(context).width.clamp(240, 430) * .85,
-                    child: PageView.builder(
-                      itemCount: images.length,
-                      onPageChanged: (i) => setState(() => photoIndex = i),
-                      itemBuilder: (_, i) =>
-                          widget.photo(images[i], height: 430),
-                    ),
-                  ),
-                  Positioned(
-                    top: MediaQuery.paddingOf(context).top + 12,
-                    right: 16,
-                    child: IconButton.filled(
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_forward),
-                    ),
-                  ),
-                  Positioned(
-                    top: MediaQuery.paddingOf(context).top + 12,
-                    left: 16,
-                    child: IconButton.filled(
-                      tooltip: favorite
-                          ? 'إزالة المطعم من المفضلة'
-                          : 'حفظ المطعم في المفضلة',
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: scarlet,
-                      ),
-                      onPressed: savingFavorite ? null : toggle,
-                      icon: Icon(
-                        favorite ? Icons.favorite : Icons.favorite_border,
+        body: RefreshIndicator(
+          onRefresh: refresh,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Stack(
+                  children: [
+                    SizedBox(
+                      height:
+                          MediaQuery.sizeOf(context).width.clamp(240, 430) *
+                          .85,
+                      child: PageView.builder(
+                        itemCount: images.length,
+                        onPageChanged: (i) => setState(() => photoIndex = i),
+                        itemBuilder: (_, i) =>
+                            widget.photo(images[i], height: 430),
                       ),
                     ),
-                  ),
-                  if (images.length > 1)
                     Positioned(
-                      bottom: 12,
-                      left: 0,
-                      right: 0,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          for (var i = 0; i < images.length; i++)
-                            Container(
-                              margin: const EdgeInsets.all(3),
-                              height: 7,
-                              width: i == photoIndex ? 18 : 7,
-                              decoration: BoxDecoration(
-                                color: i == photoIndex ? scarlet : Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                            ),
-                        ],
+                      top: MediaQuery.paddingOf(context).top + 12,
+                      right: 16,
+                      child: IconButton.filled(
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.arrow_forward),
                       ),
                     ),
-                ],
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.all(18),
-              sliver: SliverList.list(
-                children: [
-                  Text(widget.meal['name'] ?? '', style: heading(28)),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.meal['description'] ?? '',
-                    style: const TextStyle(color: Colors.grey, height: 1.5),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Icon(Icons.storefront_outlined, color: scarlet),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          widget.restaurant['name'] ?? '',
-                          style: heading(16),
+                    Positioned(
+                      top: MediaQuery.paddingOf(context).top + 12,
+                      left: 16,
+                      child: IconButton.filled(
+                        tooltip: favorite
+                            ? 'إزالة المطعم من المفضلة'
+                            : 'حفظ المطعم في المفضلة',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: scarlet,
+                        ),
+                        onPressed: savingFavorite ? null : toggle,
+                        icon: Icon(
+                          favorite ? Icons.favorite : Icons.favorite_border,
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  if (widget.meal['previous_price'] != null)
-                    Text(
-                      money(widget.meal['previous_price']),
-                      style: const TextStyle(
-                        decoration: TextDecoration.lineThrough,
-                        color: Colors.grey,
-                      ),
                     ),
-                  Text(
-                    money(unitPrice),
-                    style: const TextStyle(
-                      fontSize: 30,
-                      color: scarlet,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  if (sizes.isNotEmpty) ...[
-                    section('اختر الحجم', 'مطلوب'),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final single =
-                            constraints.maxWidth < 340 ||
-                            MediaQuery.textScalerOf(context).scale(16) > 22;
-                        return Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
+                    if (images.length > 1)
+                      Positioned(
+                        bottom: 12,
+                        left: 0,
+                        right: 0,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            for (final s in sizes)
-                              SizedBox(
-                                width: single
-                                    ? constraints.maxWidth
-                                    : (constraints.maxWidth - 10) / 2,
-                                child: Semantics(
-                                  selected: s['id'] == sizeId,
-                                  button: true,
-                                  child: InkWell(
-                                    onTap: () =>
-                                        setState(() => sizeId = s['id']),
-                                    borderRadius: BorderRadius.circular(14),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(14),
-                                      decoration: BoxDecoration(
-                                        color: s['id'] == sizeId
-                                            ? const Color(0xfffff2f3)
-                                            : Colors.white,
-                                        borderRadius: BorderRadius.circular(14),
-                                        border: Border.all(
-                                          color: s['id'] == sizeId
-                                              ? scarlet
-                                              : const Color(0xffe6e6e8),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  s['name'],
-                                                  style: heading(17),
-                                                ),
-                                                Text(
-                                                  money(s['price']),
-                                                  style: TextStyle(
-                                                    color: s['id'] == sizeId
-                                                        ? scarlet
-                                                        : Colors.black,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          Icon(
-                                            s['id'] == sizeId
-                                                ? Icons.radio_button_checked
-                                                : Icons.radio_button_off,
-                                            color: s['id'] == sizeId
-                                                ? scarlet
-                                                : Colors.grey,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                            for (var i = 0; i < images.length; i++)
+                              Container(
+                                margin: const EdgeInsets.all(3),
+                                height: 7,
+                                width: i == photoIndex ? 18 : 7,
+                                decoration: BoxDecoration(
+                                  color: i == photoIndex
+                                      ? scarlet
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
                               ),
                           ],
-                        );
-                      },
-                    ),
-                  ],
-                  if (addons.isNotEmpty) ...[
-                    section('إضافات', 'اختياري'),
-                    for (final a in addons)
-                      Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: InkWell(
-                          onTap: () => setState(
-                            () => selected.contains(a['id'])
-                                ? selected.remove(a['id'])
-                                : selected.add(a['id']),
-                          ),
-                          borderRadius: BorderRadius.circular(14),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
-                            ),
-                            child: Row(
-                              children: [
-                                Checkbox(
-                                  value: selected.contains(a['id']),
-                                  onChanged: (_) => setState(
-                                    () => selected.contains(a['id'])
-                                        ? selected.remove(a['id'])
-                                        : selected.add(a['id']),
-                                  ),
-                                ),
-                                if (a['image_path'] != null)
-                                  Padding(
-                                    padding: const EdgeInsetsDirectional.only(
-                                      end: 10,
-                                    ),
-                                    child: SizedBox(
-                                      width: 44,
-                                      child: widget.photo(
-                                        a['image_path'],
-                                        height: 44,
-                                      ),
-                                    ),
-                                  ),
-                                Expanded(child: Text(a['name'])),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '+ ${money(a['price'])}',
-                                  style: const TextStyle(
-                                    color: scarlet,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         ),
                       ),
                   ],
-                  section('ملاحظاتك للمطعم', 'اختياري'),
-                  TextField(
-                    controller: notes,
-                    maxLength: 250,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      hintText: 'مثال: بدون بصل',
-                      prefixIcon: Icon(Icons.edit_outlined),
-                    ),
-                  ),
-                  if (!available)
-                    const Text(
-                      'الوجبة أو المطعم غير متاح للطلب حاليًا',
-                      style: TextStyle(color: Colors.orange),
-                    ),
-                  if (error != null)
-                    Text(error!, style: const TextStyle(color: scarlet)),
-                  const SizedBox(height: 16),
-                ],
+                ),
               ),
-            ),
-          ],
+              SliverPadding(
+                padding: const EdgeInsets.all(18),
+                sliver: SliverList.list(
+                  children: [
+                    Text(_meal['name'] ?? '', style: heading(28)),
+                    const SizedBox(height: 8),
+                    Text(
+                      _meal['description'] ?? '',
+                      style: const TextStyle(color: Colors.grey, height: 1.5),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(Icons.storefront_outlined, color: scarlet),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _restaurant['name'] ?? '',
+                            style: heading(16),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    if (_meal['previous_price'] != null)
+                      Text(
+                        money(_meal['previous_price']),
+                        style: const TextStyle(
+                          decoration: TextDecoration.lineThrough,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    Text(
+                      money(unitPrice),
+                      style: const TextStyle(
+                        fontSize: 30,
+                        color: scarlet,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (sizes.isNotEmpty) ...[
+                      section('اختر الحجم', 'مطلوب'),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final single =
+                              constraints.maxWidth < 340 ||
+                              MediaQuery.textScalerOf(context).scale(16) > 22;
+                          return Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              for (final s in sizes)
+                                SizedBox(
+                                  width: single
+                                      ? constraints.maxWidth
+                                      : (constraints.maxWidth - 10) / 2,
+                                  child: Semantics(
+                                    selected: s['id'] == sizeId,
+                                    button: true,
+                                    child: InkWell(
+                                      onTap: () =>
+                                          setState(() => sizeId = s['id']),
+                                      borderRadius: BorderRadius.circular(14),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(14),
+                                        decoration: BoxDecoration(
+                                          color: s['id'] == sizeId
+                                              ? const Color(0xfffff2f3)
+                                              : Colors.white,
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          border: Border.all(
+                                            color: s['id'] == sizeId
+                                                ? scarlet
+                                                : const Color(0xffe6e6e8),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    s['name'],
+                                                    style: heading(17),
+                                                  ),
+                                                  Text(
+                                                    money(s['price']),
+                                                    style: TextStyle(
+                                                      color: s['id'] == sizeId
+                                                          ? scarlet
+                                                          : Colors.black,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Icon(
+                                              s['id'] == sizeId
+                                                  ? Icons.radio_button_checked
+                                                  : Icons.radio_button_off,
+                                              color: s['id'] == sizeId
+                                                  ? scarlet
+                                                  : Colors.grey,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ],
+                    if (addons.isNotEmpty) ...[
+                      section('إضافات', 'اختياري'),
+                      for (final a in addons)
+                        Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: InkWell(
+                            onTap: () => setState(
+                              () => selected.contains(a['id'])
+                                  ? selected.remove(a['id'])
+                                  : selected.add(a['id']),
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              child: Row(
+                                children: [
+                                  Checkbox(
+                                    value: selected.contains(a['id']),
+                                    onChanged: (_) => setState(
+                                      () => selected.contains(a['id'])
+                                          ? selected.remove(a['id'])
+                                          : selected.add(a['id']),
+                                    ),
+                                  ),
+                                  if (a['image_path'] != null)
+                                    Padding(
+                                      padding: const EdgeInsetsDirectional.only(
+                                        end: 10,
+                                      ),
+                                      child: SizedBox(
+                                        width: 44,
+                                        child: widget.photo(
+                                          a['image_path'],
+                                          height: 44,
+                                        ),
+                                      ),
+                                    ),
+                                  Expanded(child: Text(a['name'])),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '+ ${money(a['price'])}',
+                                    style: const TextStyle(
+                                      color: scarlet,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                    section('ملاحظاتك للمطعم', 'اختياري'),
+                    TextField(
+                      controller: notes,
+                      maxLength: 250,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        hintText: 'مثال: بدون بصل',
+                        prefixIcon: Icon(Icons.edit_outlined),
+                      ),
+                    ),
+                    if (!available)
+                      Text(
+                        _meal['available'] == false
+                            ? 'غير متوفرة حاليًا'
+                            : 'المطعم مغلق حاليًا',
+                        style: const TextStyle(color: Colors.orange),
+                      ),
+                    if (error != null)
+                      Text(error!, style: const TextStyle(color: scarlet)),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         bottomNavigationBar: SafeArea(
           child: Padding(
@@ -400,7 +441,7 @@ class _MealDetailsPageState extends State<MealDetailsPage> {
                     onPressed: !available
                         ? null
                         : () => Navigator.pop(context, <String, dynamic>{
-                            ...widget.meal,
+                            ..._meal,
                             'quantity': quantity,
                             'price': unitPrice,
                             'base_price': basePrice,

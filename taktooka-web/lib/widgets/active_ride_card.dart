@@ -462,7 +462,9 @@ class ActiveRideCard extends StatelessWidget {
                         : 'completed',
                   ),
             child: AppText(
-              state == 'accepted'
+              busy
+                  ? 'جاري حفظ حالة الرحلة…'
+                  : state == 'accepted'
                   ? 'وصلت لمكان الزبون'
                   : state == 'arrived'
                   ? 'بدء الرحلة'

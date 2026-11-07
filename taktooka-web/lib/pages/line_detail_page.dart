@@ -94,7 +94,10 @@ class _LineDetailPageState extends State<LineDetailPage> {
     return '${at != null && now.difference(at).inSeconds <= 30}:${due != null && !now.isBefore(due)}';
   }
 
-  Future<void> load() async {
+  final _manualRefreshGate = RefreshGate();
+  Future<void> load() => _manualRefreshGate.run((_) => _loadOnce());
+
+  Future<void> _loadOnce() async {
     if (fetching) return;
     fetching = true;
     final loadUser = widget.b.db.auth.currentUser?.id;
@@ -417,411 +420,420 @@ class _LineDetailPageState extends State<LineDetailPage> {
     final customer = Json.from(data!['customer'] as Map? ?? {});
     return Scaffold(
       appBar: AppBar(title: AppText(lineKinds[l['kind']] ?? 'تفاصيل الخط')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (error != null)
-            AppText(error!, style: const TextStyle(color: scarlet)),
-          PaperCard(
-            child: Row(
-              children: [
-                Icon(
-                  l['status'] == 'accepted'
-                      ? Icons.check_circle
-                      : Icons.info_outline,
-                  color: l['status'] == 'accepted' ? Colors.green : scarlet,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: AppText(
-                    lineStatuses[l['status']] ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          LineSection(
-            title: 'بيانات الراكب',
-            icon: Icons.person,
-            children: [fact('الراكب', l['passenger_name'])],
-          ),
-          LineSection(
-            title: 'مسار الخط',
-            icon: Icons.route,
-            children: [
-              fact('نقطة الانطلاق', l['pickup_name']),
-              OutlinedButton.icon(
-                onPressed: () => openPoint(pickup),
-                onLongPress: () => openPoint(pickup, choose: true),
-                icon: const Icon(Icons.location_on, color: scarlet),
-                label: const AppText('عرض نقطة الانطلاق على الخريطة'),
-              ),
-              const SizedBox(height: 8),
-              fact('نقطة الوصول', l['destination_name']),
-              OutlinedButton.icon(
-                onPressed: () => openPoint(destination),
-                onLongPress: () => openPoint(destination, choose: true),
-                icon: const Icon(Icons.location_on, color: Colors.blue),
-                label: const AppText('عرض نقطة الوصول على الخريطة'),
-              ),
-            ],
-          ),
-          LineSection(
-            title: 'أيام الخدمة',
-            icon: Icons.calendar_month,
-            children: [
-              fact('عدد أيام الخدمة', l['service_days']),
-              fact('البداية', l['start_date']),
-              fact('النهاية', l['end_date']),
-              fact(
-                'الأيام المستبعدة',
-                (l['excluded_days'] as List)
-                    .map((i) => weekDays[i as int])
-                    .join('، '),
-              ),
-            ],
-          ),
-          if (l['weekly_schedule'] is Map &&
-              (l['weekly_schedule'] as Map).isNotEmpty)
-            for (final shift in ['morning', 'afternoon'])
-              Builder(
-                builder: (context) {
-                  final schedule = l['weekly_schedule'] as Map;
-                  final days =
-                      schedule.entries
-                          .where((entry) => entry.value['shift'] == shift)
-                          .toList()
-                        ..sort(
-                          (a, b) => int.parse(
-                            '${a.key}',
-                          ).compareTo(int.parse('${b.key}')),
-                        );
-                  if (days.isEmpty) return const SizedBox.shrink();
-                  final time = days.first.value;
-                  return LineSection(
-                    title: shift == 'morning'
-                        ? 'الدوام الصباحي'
-                        : 'الدوام الظهري',
-                    icon: Icons.schedule,
-                    children: [
-                      AppText(
-                        days
-                            .map((entry) => weekDays[int.parse('${entry.key}')])
-                            .join('، '),
-                      ),
-                      fact('وقت الانطلاق', displayClock(time['departure'])),
-                      fact('وقت الوصول', displayClock(time['arrival'])),
-                      fact(
-                        'وقت الرجوع للمنزل',
-                        displayClock(time['return_home']),
-                      ),
-                    ],
-                  );
-                },
-              )
-          else
-            LineSection(
-              title: 'مواعيد الخط',
-              icon: Icons.schedule,
-              children: [
-                fact('وقت الانطلاق', displayClock(l['departure'])),
-                fact('وقت الوصول', displayClock(l['arrival'])),
-                fact(
-                  'وقت الرجوع للمنزل',
-                  l['return_home'] == null
-                      ? 'غير محدد'
-                      : displayClock(l['return_home']),
-                ),
-              ],
-            ),
-          LineSection(
-            title: 'الأجور والدفع',
-            icon: Icons.payments,
-            children: [
-              AppText(
-                money(l['total_price']),
-                style: const TextStyle(
-                  color: scarlet,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              fact('الدفع', linePaymentStates[l['payment_status']]),
-            ],
-          ),
-          if (showCustomer)
-            LineSection(
-              title: 'بيانات الزبون',
-              icon: Icons.contact_phone,
-              children: [
-                fact('الزبون', customer['name']),
-                contactPhone(customer['phone']),
-              ],
-            )
-          else if (data!['captain'] is Map)
-            LineSection(
-              title: 'الكابتن',
-              icon: Icons.contact_phone,
-              children: [
-                fact('الكابتن', data!['captain']['name']),
-                contactPhone(data!['captain']['phone']),
-              ],
-            ),
-          const SizedBox(height: 12),
-          if (l['status'] == 'pending' && widget.b.captain && !owner)
-            FilledButton(
-              onPressed: busy || !verified || !widget.b.subscribed
-                  ? null
-                  : () => action('accept'),
-              child: AppText(
-                widget.b.subscribed
-                    ? 'قبول الخط'
-                    : 'جدّد اشتراكك لقبول خطوط جديدة',
-              ),
-            ),
-          if (l['status'] == 'pending' && owner)
-            TextButton(
-              onPressed: busy ? null : () => action('cancel'),
-              child: const AppText('إلغاء طلب الخط'),
-            ),
-          if (active != null && active['late_at'] != null)
+      body: RefreshIndicator(
+        onRefresh: load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          children: [
+            if (error != null)
+              AppText(error!, style: const TextStyle(color: scarlet)),
             PaperCard(
-              child: AppText(
-                '⚠ تحذير تأخر الخط: لم يتم استلام الركاب خلال 5 دقائق من الموعد\nالحالة الحالية: ${lineRunStates[active['state']]}',
-                style: const TextStyle(color: scarlet),
-              ),
-            ),
-          if (['pending', 'accepted'].contains(l['status'])) ...[
-            AppText(
-              l['status'] == 'pending' ? 'خريطة مسار الخط' : 'التتبع المباشر',
-              style: heading(19),
-            ),
-            SizedBox(
-              height: 300,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: FlutterMap(
-                  mapController: mapController,
-                  options: MapOptions(
-                    onMapReady: () => mapReady = true,
-                    initialCenter: pickup,
-                    initialZoom: 14,
-                    maxZoom: 20,
-                    interactionOptions: const InteractionOptions(
-                      flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-                    ),
-                    initialCameraFit: CameraFit.bounds(
-                      bounds: LatLngBounds.fromPoints([
-                        pickup,
-                        destination,
-                        ...routePoints,
-                      ]),
-                      maxZoom: 17,
-                      padding: const EdgeInsets.all(40),
+              child: Row(
+                children: [
+                  Icon(
+                    l['status'] == 'accepted'
+                        ? Icons.check_circle
+                        : Icons.info_outline,
+                    color: l['status'] == 'accepted' ? Colors.green : scarlet,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: AppText(
+                      lineStatuses[l['status']] ?? '',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
-                  children: [
-                    const BookingMapLayer(),
-                    if (showTripRoute(
-                          captainView: widget.b.captain && !owner,
-                          status: l['status'] as String?,
-                        ) &&
-                        routePoints.length > 1)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: routePoints,
-                            color: scarlet,
-                            strokeWidth: 5,
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            LineSection(
+              title: 'بيانات الراكب',
+              icon: Icons.person,
+              children: [fact('الراكب', l['passenger_name'])],
+            ),
+            LineSection(
+              title: 'مسار الخط',
+              icon: Icons.route,
+              children: [
+                fact('نقطة الانطلاق', l['pickup_name']),
+                OutlinedButton.icon(
+                  onPressed: () => openPoint(pickup),
+                  onLongPress: () => openPoint(pickup, choose: true),
+                  icon: const Icon(Icons.location_on, color: scarlet),
+                  label: const AppText('عرض نقطة الانطلاق على الخريطة'),
+                ),
+                const SizedBox(height: 8),
+                fact('نقطة الوصول', l['destination_name']),
+                OutlinedButton.icon(
+                  onPressed: () => openPoint(destination),
+                  onLongPress: () => openPoint(destination, choose: true),
+                  icon: const Icon(Icons.location_on, color: Colors.blue),
+                  label: const AppText('عرض نقطة الوصول على الخريطة'),
+                ),
+              ],
+            ),
+            LineSection(
+              title: 'أيام الخدمة',
+              icon: Icons.calendar_month,
+              children: [
+                fact('عدد أيام الخدمة', l['service_days']),
+                fact('البداية', l['start_date']),
+                fact('النهاية', l['end_date']),
+                fact(
+                  'الأيام المستبعدة',
+                  (l['excluded_days'] as List)
+                      .map((i) => weekDays[i as int])
+                      .join('، '),
+                ),
+              ],
+            ),
+            if (l['weekly_schedule'] is Map &&
+                (l['weekly_schedule'] as Map).isNotEmpty)
+              for (final shift in ['morning', 'afternoon'])
+                Builder(
+                  builder: (context) {
+                    final schedule = l['weekly_schedule'] as Map;
+                    final days =
+                        schedule.entries
+                            .where((entry) => entry.value['shift'] == shift)
+                            .toList()
+                          ..sort(
+                            (a, b) => int.parse(
+                              '${a.key}',
+                            ).compareTo(int.parse('${b.key}')),
+                          );
+                    if (days.isEmpty) return const SizedBox.shrink();
+                    final time = days.first.value;
+                    return LineSection(
+                      title: shift == 'morning'
+                          ? 'الدوام الصباحي'
+                          : 'الدوام الظهري',
+                      icon: Icons.schedule,
+                      children: [
+                        AppText(
+                          days
+                              .map(
+                                (entry) => weekDays[int.parse('${entry.key}')],
+                              )
+                              .join('، '),
+                        ),
+                        fact('وقت الانطلاق', displayClock(time['departure'])),
+                        fact('وقت الوصول', displayClock(time['arrival'])),
+                        fact(
+                          'وقت الرجوع للمنزل',
+                          displayClock(time['return_home']),
+                        ),
+                      ],
+                    );
+                  },
+                )
+            else
+              LineSection(
+                title: 'مواعيد الخط',
+                icon: Icons.schedule,
+                children: [
+                  fact('وقت الانطلاق', displayClock(l['departure'])),
+                  fact('وقت الوصول', displayClock(l['arrival'])),
+                  fact(
+                    'وقت الرجوع للمنزل',
+                    l['return_home'] == null
+                        ? 'غير محدد'
+                        : displayClock(l['return_home']),
+                  ),
+                ],
+              ),
+            LineSection(
+              title: 'الأجور والدفع',
+              icon: Icons.payments,
+              children: [
+                AppText(
+                  money(l['total_price']),
+                  style: const TextStyle(
+                    color: scarlet,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                fact('الدفع', linePaymentStates[l['payment_status']]),
+              ],
+            ),
+            if (showCustomer)
+              LineSection(
+                title: 'بيانات الزبون',
+                icon: Icons.contact_phone,
+                children: [
+                  fact('الزبون', customer['name']),
+                  contactPhone(customer['phone']),
+                ],
+              )
+            else if (data!['captain'] is Map)
+              LineSection(
+                title: 'الكابتن',
+                icon: Icons.contact_phone,
+                children: [
+                  fact('الكابتن', data!['captain']['name']),
+                  contactPhone(data!['captain']['phone']),
+                ],
+              ),
+            const SizedBox(height: 12),
+            if (l['status'] == 'pending' && widget.b.captain && !owner)
+              FilledButton(
+                onPressed: busy || !verified || !widget.b.subscribed
+                    ? null
+                    : () => action('accept'),
+                child: AppText(
+                  widget.b.subscribed
+                      ? 'قبول الخط'
+                      : 'جدّد اشتراكك لقبول خطوط جديدة',
+                ),
+              ),
+            if (l['status'] == 'pending' && owner)
+              TextButton(
+                onPressed: busy ? null : () => action('cancel'),
+                child: const AppText('إلغاء طلب الخط'),
+              ),
+            if (active != null && active['late_at'] != null)
+              PaperCard(
+                child: AppText(
+                  '⚠ تحذير تأخر الخط: لم يتم استلام الركاب خلال 5 دقائق من الموعد\nالحالة الحالية: ${lineRunStates[active['state']]}',
+                  style: const TextStyle(color: scarlet),
+                ),
+              ),
+            if (['pending', 'accepted'].contains(l['status'])) ...[
+              AppText(
+                l['status'] == 'pending' ? 'خريطة مسار الخط' : 'التتبع المباشر',
+                style: heading(19),
+              ),
+              SizedBox(
+                height: 300,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: FlutterMap(
+                    mapController: mapController,
+                    options: MapOptions(
+                      onMapReady: () => mapReady = true,
+                      initialCenter: pickup,
+                      initialZoom: 14,
+                      maxZoom: 20,
+                      interactionOptions: const InteractionOptions(
+                        flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                      ),
+                      initialCameraFit: CameraFit.bounds(
+                        bounds: LatLngBounds.fromPoints([
+                          pickup,
+                          destination,
+                          ...routePoints,
+                        ]),
+                        maxZoom: 17,
+                        padding: const EdgeInsets.all(40),
+                      ),
+                    ),
+                    children: [
+                      const BookingMapLayer(),
+                      if (showTripRoute(
+                            captainView: widget.b.captain && !owner,
+                            status: l['status'] as String?,
+                          ) &&
+                          routePoints.length > 1)
+                        PolylineLayer(
+                          polylines: [
+                            Polyline(
+                              points: routePoints,
+                              color: scarlet,
+                              strokeWidth: 5,
+                            ),
+                          ],
+                        ),
+                      MarkerLayer(markers: points),
+                    ],
+                  ),
+                ),
+              ),
+              if (l['status'] == 'accepted')
+                AppText(
+                  contact['lat'] == null
+                      ? 'بانتظار مشاركة الموقع الحالي'
+                      : fresh
+                      ? 'الموقع يتحدث مباشرة'
+                      : 'الموقع قديم • آخر تحديث ${contact['location_at']}',
+                ),
+              if (owner && l['status'] == 'accepted')
+                OutlinedButton(
+                  onPressed: busy || sharing ? null : share,
+                  child: AppText(
+                    sharing
+                        ? 'موقعك يُشارك أثناء فتح تفاصيل الخط وقرب موعده'
+                        : 'مشاركة موقعي مع الكابتن وقت الخط',
+                  ),
+                ),
+              if (mine)
+                OutlinedButton.icon(
+                  onPressed: () => openPoint(
+                    active?['state'] == 'picked_up' ? destination : pickup,
+                  ),
+                  onLongPress: () => openPoint(
+                    active?['state'] == 'picked_up' ? destination : pickup,
+                    choose: true,
+                  ),
+                  icon: const Icon(Icons.navigation),
+                  label: AppText(
+                    active?['state'] == 'picked_up'
+                        ? 'التوجّه لنقطة الوصول'
+                        : 'التوجّه لنقطة الانطلاق',
+                  ),
+                ),
+              if (contact['phone'] != null)
+                TextButton.icon(
+                  onPressed: () =>
+                      launchUrl(Uri.parse('tel:${contact['phone']}')),
+                  icon: const Icon(Icons.phone),
+                  label: const AppText('اتصال'),
+                ),
+              if (mine &&
+                  active != null &&
+                  !['completed', 'missed'].contains(active['state'])) ...[
+                if (['scheduled', 'heading'].contains(active['state']))
+                  FilledButton(
+                    onPressed: busy
+                        ? null
+                        : () => action('run_state', {
+                            'run_id': active['id'],
+                            'state': active['state'] == 'scheduled'
+                                ? 'heading'
+                                : 'arrived',
+                          }),
+                    child: AppText(
+                      active['state'] == 'scheduled'
+                          ? 'متوجه لاستلام الركاب'
+                          : 'لقد وصلت',
+                    ),
+                  ),
+                if (['arrived', 'picked_up'].contains(active['state'])) ...[
+                  if (active['state'] == 'arrived')
+                    const AppText(
+                      'بعد ركوب الراكب اختَر خطك التالي أو توجّه إلى الوجهة.',
+                    ),
+                  if (nextLine != null)
+                    PaperCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          AppText('الخط التالي حان موعده', style: heading(17)),
+                          AppText(
+                            '${nextLine['passenger_name']} • ${nextLine['pickup_name']}',
+                          ),
+                          AppText(
+                            'يبعد ${(nextLine['distance_m'] as num).round()} متر عن هذا الخط',
+                          ),
+                          FilledButton.icon(
+                            onPressed: busy
+                                ? null
+                                : () => action('depart', {
+                                    'run_id': active['id'],
+                                    'mode': 'next',
+                                  }),
+                            icon: const Icon(Icons.route),
+                            label: const AppText('انطلاق للخط التالي'),
                           ),
                         ],
                       ),
-                    MarkerLayer(markers: points),
-                  ],
-                ),
-              ),
-            ),
-            if (l['status'] == 'accepted')
-              AppText(
-                contact['lat'] == null
-                    ? 'بانتظار مشاركة الموقع الحالي'
-                    : fresh
-                    ? 'الموقع يتحدث مباشرة'
-                    : 'الموقع قديم • آخر تحديث ${contact['location_at']}',
-              ),
-            if (owner && l['status'] == 'accepted')
-              OutlinedButton(
-                onPressed: busy || sharing ? null : share,
-                child: AppText(
-                  sharing
-                      ? 'موقعك يُشارك أثناء فتح تفاصيل الخط وقرب موعده'
-                      : 'مشاركة موقعي مع الكابتن وقت الخط',
-                ),
-              ),
-            if (mine)
-              OutlinedButton.icon(
-                onPressed: () => openPoint(
-                  active?['state'] == 'picked_up' ? destination : pickup,
-                ),
-                onLongPress: () => openPoint(
-                  active?['state'] == 'picked_up' ? destination : pickup,
-                  choose: true,
-                ),
-                icon: const Icon(Icons.navigation),
-                label: AppText(
-                  active?['state'] == 'picked_up'
-                      ? 'التوجّه لنقطة الوصول'
-                      : 'التوجّه لنقطة الانطلاق',
-                ),
-              ),
-            if (contact['phone'] != null)
-              TextButton.icon(
-                onPressed: () =>
-                    launchUrl(Uri.parse('tel:${contact['phone']}')),
-                icon: const Icon(Icons.phone),
-                label: const AppText('اتصال'),
-              ),
-            if (mine &&
-                active != null &&
-                !['completed', 'missed'].contains(active['state'])) ...[
-              if (['scheduled', 'heading'].contains(active['state']))
-                FilledButton(
-                  onPressed: busy
-                      ? null
-                      : () => action('run_state', {
-                          'run_id': active['id'],
-                          'state': active['state'] == 'scheduled'
-                              ? 'heading'
-                              : 'arrived',
-                        }),
-                  child: AppText(
-                    active['state'] == 'scheduled'
-                        ? 'متوجه لاستلام الركاب'
-                        : 'لقد وصلت',
+                    )
+                  else
+                    const AppText(
+                      'ماكو خط قريب حان موعده؛ تكدر تتوجه إلى الوجهة.',
+                    ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: busy
+                        ? null
+                        : () => action('depart', {
+                            'run_id': active['id'],
+                            'mode': 'destination',
+                          }),
+                    icon: const Icon(Icons.navigation),
+                    label: const AppText('ذهاب إلى الوجهة'),
                   ),
-                ),
-              if (['arrived', 'picked_up'].contains(active['state'])) ...[
-                if (active['state'] == 'arrived')
-                  const AppText(
-                    'بعد ركوب الراكب اختَر خطك التالي أو توجّه إلى الوجهة.',
-                  ),
-                if (nextLine != null)
-                  PaperCard(
+                ],
+              ],
+            ],
+            if (mine && Backend.rows(data!['onboard']).isNotEmpty) ...[
+              const SizedBox(height: 14),
+              AppText('الركاب وياك — وجهات الوصول', style: heading(19)),
+              for (final passenger in Backend.rows(data!['onboard']))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: PaperCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        AppText('الخط التالي حان موعده', style: heading(17)),
                         AppText(
-                          '${nextLine['passenger_name']} • ${nextLine['pickup_name']}',
+                          passenger['passenger_name'],
+                          style: heading(17),
                         ),
-                        AppText(
-                          'يبعد ${(nextLine['distance_m'] as num).round()} متر عن هذا الخط',
+                        AppText(passenger['destination_name']),
+                        OutlinedButton.icon(
+                          onPressed: () => openPoint(
+                            LatLng(
+                              (passenger['destination_lat'] as num).toDouble(),
+                              (passenger['destination_lng'] as num).toDouble(),
+                            ),
+                          ),
+                          onLongPress: () => openPoint(
+                            LatLng(
+                              (passenger['destination_lat'] as num).toDouble(),
+                              (passenger['destination_lng'] as num).toDouble(),
+                            ),
+                            choose: true,
+                          ),
+                          icon: const Icon(Icons.navigation),
+                          label: const AppText('الذهاب لهذه الوجهة'),
                         ),
-                        FilledButton.icon(
+                        FilledButton(
                           onPressed: busy
                               ? null
-                              : () => action('depart', {
-                                  'run_id': active['id'],
-                                  'mode': 'next',
+                              : () => action('run_state', {
+                                  'id': passenger['line_id'],
+                                  'run_id': passenger['run_id'],
+                                  'state': 'completed',
                                 }),
-                          icon: const Icon(Icons.route),
-                          label: const AppText('انطلاق للخط التالي'),
+                          child: const AppText('وصل الراكب إلى وجهته'),
                         ),
                       ],
                     ),
-                  )
-                else
-                  const AppText(
-                    'ماكو خط قريب حان موعده؛ تكدر تتوجه إلى الوجهة.',
                   ),
-                const SizedBox(height: 8),
-                FilledButton.icon(
-                  onPressed: busy
-                      ? null
-                      : () => action('depart', {
-                          'run_id': active['id'],
-                          'mode': 'destination',
-                        }),
-                  icon: const Icon(Icons.navigation),
-                  label: const AppText('ذهاب إلى الوجهة'),
                 ),
-              ],
             ],
-          ],
-          if (mine && Backend.rows(data!['onboard']).isNotEmpty) ...[
-            const SizedBox(height: 14),
-            AppText('الركاب وياك — وجهات الوصول', style: heading(19)),
-            for (final passenger in Backend.rows(data!['onboard']))
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: PaperCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      AppText(passenger['passenger_name'], style: heading(17)),
-                      AppText(passenger['destination_name']),
-                      OutlinedButton.icon(
-                        onPressed: () => openPoint(
-                          LatLng(
-                            (passenger['destination_lat'] as num).toDouble(),
-                            (passenger['destination_lng'] as num).toDouble(),
-                          ),
-                        ),
-                        onLongPress: () => openPoint(
-                          LatLng(
-                            (passenger['destination_lat'] as num).toDouble(),
-                            (passenger['destination_lng'] as num).toDouble(),
-                          ),
-                          choose: true,
-                        ),
-                        icon: const Icon(Icons.navigation),
-                        label: const AppText('الذهاب لهذه الوجهة'),
-                      ),
-                      FilledButton(
-                        onPressed: busy
-                            ? null
-                            : () => action('run_state', {
-                                'id': passenger['line_id'],
-                                'run_id': passenger['run_id'],
-                                'state': 'completed',
-                              }),
-                        child: const AppText('وصل الراكب إلى وجهته'),
-                      ),
-                    ],
-                  ),
+            if (owner && l['payment_status'] == 'due')
+              FilledButton(
+                onPressed: busy ? null : () => action('payment'),
+                child: AppText('أؤكد دفع ${money(l['total_price'])} للكابتن'),
+              ),
+            if (mine && receiptDue)
+              FilledButton(
+                onPressed: busy ? null : () => action('payment'),
+                child: const AppText('لقد استلمت الأموال'),
+              ),
+            const SizedBox(height: 16),
+            AppText('جدول الخط', style: heading(20)),
+            for (final r in runs)
+              ListTile(
+                title: AppText(
+                  '${r['service_date']} • ${lineRunStates[r['state']]}',
+                ),
+                subtitle: AppText(
+                  'وقت الانطلاق: ${displayTime(r['departure_at'])} • وقت الوصول: ${displayTime(r['arrival_at'])}${r['return_at'] == null ? '' : ' • وقت الرجوع للمنزل: ${displayTime(r['return_at'])}'}${r['late_at'] == null ? '' : '\nسُجّل تحذير تأخير'}',
+                ),
+                leading: Icon(
+                  r['state'] == 'completed'
+                      ? Icons.check_circle
+                      : Icons.calendar_today,
+                  color: r['late_at'] == null ? muted : scarlet,
                 ),
               ),
           ],
-          if (owner && l['payment_status'] == 'due')
-            FilledButton(
-              onPressed: busy ? null : () => action('payment'),
-              child: AppText('أؤكد دفع ${money(l['total_price'])} للكابتن'),
-            ),
-          if (mine && receiptDue)
-            FilledButton(
-              onPressed: busy ? null : () => action('payment'),
-              child: const AppText('لقد استلمت الأموال'),
-            ),
-          const SizedBox(height: 16),
-          AppText('جدول الخط', style: heading(20)),
-          for (final r in runs)
-            ListTile(
-              title: AppText(
-                '${r['service_date']} • ${lineRunStates[r['state']]}',
-              ),
-              subtitle: AppText(
-                'وقت الانطلاق: ${displayTime(r['departure_at'])} • وقت الوصول: ${displayTime(r['arrival_at'])}${r['return_at'] == null ? '' : ' • وقت الرجوع للمنزل: ${displayTime(r['return_at'])}'}${r['late_at'] == null ? '' : '\nسُجّل تحذير تأخير'}',
-              ),
-              leading: Icon(
-                r['state'] == 'completed'
-                    ? Icons.check_circle
-                    : Icons.calendar_today,
-                color: r['late_at'] == null ? muted : scarlet,
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:taktooka/services/refresh_gate.dart';
 import 'package:taktooka/core/display_format.dart';
 
 import 'dart:async';
@@ -495,7 +496,10 @@ class NotificationCenter extends ChangeNotifier {
     if (!closed) notifyListeners();
   }
 
-  Future<void> load() async {
+  final _manualRefreshGate = RefreshGate();
+  Future<void> load() => _manualRefreshGate.run((_) => _loadOnce());
+
+  Future<void> _loadOnce() async {
     final uid = user;
     if (uid == null || loading || closed) return;
     loading = true;
