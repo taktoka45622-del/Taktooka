@@ -1,0 +1,56 @@
+:root{--ink:#262027;--muted:#665a63;--paper:#f3f0f2;--surface:#fff;--raised:#f3eef1;--line:#d5cbd1;--field-line:#91838d;--accent:#b80030;--positive:#14663b;--positive-bg:#e9f6ee;--negative:#a41331;--negative-bg:#fff0f4;--caution:#754c00;--caution-bg:#fff3d6;--info:#214f96;--info-bg:#edf3ff;--tkt-red:#c90035}
+:root[data-theme=dark]{--ink:#f3eaf0;--muted:#bcaeb8;--paper:#141115;--surface:#211a21;--raised:#2b222b;--line:#53434e;--field-line:#8d7886;--accent:#ff87a6;--positive:#8fe5b4;--positive-bg:#173629;--negative:#ff99b4;--negative-bg:#482132;--caution:#ffdc89;--caution-bg:#3d2c14;--info:#a9c9ff;--info-bg:#1d2d47}
+:root body{color:var(--ink)}
+:root .card,:root .record,:root .metric,:root .company-metric,:root .inventory-tile,:root .platform-card,:root .banner-item,:root .support-conversation,:root .keyboard-help{background:var(--surface);color:var(--ink);border-color:var(--line)}
+:root .page h2,:root .page h3,:root .keyboard-help h2,:root .metric strong,:root .company-metric strong,:root .inventory-value,:root .facts dd,:root .support-summary strong,:root .company-record-money,:root .profile-heading h2,:root .profile-heading h3,:root .number-roll{color:var(--ink)}
+:root p,:root small,:root .page-description,:root .company-metric span,:root .company-metric small,:root .record small,:root .inventory-label,:root .facts dt,:root .support-summary span,:root .company-intro small,:root #companyUpdated,:root .keyboard-help p,:root .global-search-result p,:root .company-chart-column small,:root .company-legend{color:var(--muted)}
+:root .company-metric:nth-child(n){background:var(--surface)}
+:root .facts>div,:root .company-alert,:root .profile-summary>div,:root .profile-section,:root .company-record,:root .company-funds,:root .staff-permission-chips span,:root .application-summary,:root .application-documents figure,:root .notice,:root .keyboard-help kbd{background:var(--raised)!important;color:var(--ink);border-color:var(--line)}
+:root .profile-summary strong,:root .profile-summary dd,:root .profile-heading strong,:root .application-summary strong,:root .profile-section h3,:root .notice h3,:root .keyboard-help kbd{color:var(--ink)}
+:root .page input,:root .page select,:root .page textarea,:root input,:root select,:root textarea{background:var(--surface);color:var(--ink);border-color:var(--field-line)}
+:root input::placeholder,:root textarea::placeholder{color:var(--muted);opacity:1}
+:root input:focus-visible,:root select:focus-visible,:root textarea:focus-visible,:root button:focus-visible,:root a:focus-visible,:root summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+:root button.secondary,:root .page button.secondary,:root .topbar .header-actions button{background:var(--raised);color:var(--ink);border-color:var(--line)}
+:root .page button:not(.secondary):not(.danger):not(.inventory-tile){background:var(--tkt-red);color:#fff}
+:root button:disabled,:root .page button:disabled{opacity:1;background:var(--raised)!important;color:var(--muted)!important;border:1px dashed var(--field-line);cursor:not-allowed}
+:root .page .conversation-open,:root .page button.conversation-open:not(.secondary):not(.danger):not(.inventory-tile){background:transparent;color:var(--ink)}
+:root .eyebrow,:root .inventory-open,:root .price-result,:root #staffFormStatus,:root a{color:var(--accent)}
+:root .inventory-icon{background:var(--negative-bg)!important;color:var(--accent)!important}
+:root .inventory-tile.selected{background:var(--negative-bg);border-color:var(--accent)}
+:root .company-metric.green strong,:root .company-metric.green .number-roll,:root .staff-state.active,:root .staff-active,:root .captain-location-status.live{color:var(--positive)}
+:root .company-metric.red strong,:root .company-metric.red .number-roll,:root .field-error,:root .chat-error,:root #companyStatus.error,:root .staff-state.paused{color:var(--negative)}
+:root .warning{background:var(--caution-bg);color:var(--caution);border-color:var(--caution)}
+:root .warning p,:root .warning small,:root .warning strong,:root .warning h3{color:inherit}
+:root .danger{background:var(--negative-bg)!important;color:var(--negative)!important}
+:root .badge,:root .staff-state.active,:root .conversation-state,:root .whatsapp-link{background:var(--positive-bg);color:var(--positive)}
+:root .badge.stale,:root .captain-location-status.stale,:root .chat-day{background:var(--raised);color:var(--muted)}
+:root .staff-state.paused,:root .emergency-card{background:var(--negative-bg);color:var(--negative);border-color:var(--negative)}
+:root .emergency-card h3,:root .emergency-card p,:root .emergency-card small{color:var(--negative)}
+:root th,:root .ops-table-wrap th,:root .page .table-wrap th{background:var(--raised);color:var(--ink)}
+:root td,:root th,:root .ops-table-wrap,:root .keyboard-help p,:root .global-search-group>h3{border-color:var(--line)}
+:root #serverMonitor .monitor-resource,:root #serverMonitor .monitor-stat{background:var(--raised);color:var(--ink);border-color:var(--line)}
+:root #serverMonitor .monitor-resource strong,:root #serverMonitor .monitor-stat strong{color:var(--ink)}
+:root #serverMonitor .monitor-resource.warning{background:var(--caution-bg);color:var(--caution);border-color:var(--caution)}
+:root #serverMonitor .monitor-resource.danger{background:var(--negative-bg)!important;color:var(--negative)!important;border-color:var(--negative)}
+:root #serverMonitor .monitor-resource.warning :is(h3,strong,p,small),:root #serverMonitor .monitor-resource.danger :is(h3,strong,p,small){color:inherit}
+:root .monitor-badge{background:var(--surface);color:var(--muted)}
+:root .monitor-resource progress{accent-color:var(--positive)}.monitor-resource.warning progress{accent-color:var(--caution)}.monitor-resource.danger progress{accent-color:var(--negative)}
+:root .exchange-bubble,:root .message-content{background:var(--raised);color:var(--ink)}
+:root .exchange-bubble.admin,:root .admin-message .message-content{background:var(--tkt-red);color:#fff}
+:root .exchange-bubble.admin :is(p,small,strong),:root .admin-message .message-content :is(p,small,strong,a){color:#fff}
+:root .company-hero{background:linear-gradient(120deg,#9e002b,#c90035);color:#fff}
+:root .company-hero :is(p,small,strong,span,h2,h3,.number-roll){color:#fff}
+:root .topbar .page-heading small{color:#c2b5bc}.topbar .page-heading h1{color:#fff}
+:root .topbar .header-actions{background:var(--surface);border-color:var(--line)}
+:root #status{background:#292027;color:#fff}
+:root .leaflet-control-attribution{background:var(--surface)!important;color:var(--ink)}.leaflet-container a{color:var(--accent)}.leaflet-bar a{background:var(--surface);color:var(--ink);border-color:var(--line)}
+:root #page-pricing .table-wrap th{background:var(--raised);color:var(--ink)}
+:root .captain-location-status.live{background:var(--positive-bg);color:var(--positive)}
+:root .whatsapp-link{color:var(--positive)!important;border-color:var(--positive)}
+:root .whatsapp-link:hover{background:var(--positive-bg);border-color:var(--positive)}
+:root .whatsapp-link:focus-visible{outline-color:var(--accent)}
+:root body:not(.signed-in) .topbar .page-heading h1{color:var(--ink)}
+:root body:not(.signed-in) .topbar .page-heading small{color:var(--muted)}
+:root body.signed-in>header.topbar{background-color:#251a20}
+:root .signed-in .dashboard-rail{background-color:#24191f}
+:root .company-hero{background-color:#c90035}
