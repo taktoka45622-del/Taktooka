@@ -1,0 +1,163 @@
+:root{--v22-radius:17px;--v22-shadow:0 4px 22px #35212b06}
+:root body{background:radial-gradient(ellipse at 8% 20%,#f6dce5,transparent 60%),radial-gradient(ellipse at 90% 50%,#ece9e0,transparent 60%),var(--paper)}
+:root[data-theme=dark] body{background:radial-gradient(ellipse at 8% 15%,#38202b,transparent 65%),var(--paper)}
+:root body.signed-in>header.topbar{margin:20px 28px 0 106px;padding:5px 0 14px;min-height:58px;background:none;background-color:transparent;border-radius:0;color:var(--ink)}
+:root .topbar .page-heading h1{color:var(--ink);font-size:20px;font-weight:700}
+:root .topbar .page-heading small{color:var(--muted);font-size:10px}
+:root .topbar #menuToggle{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:50%;font-size:18px}
+:root .dashboard-theme-toggle{background:var(--surface);color:var(--ink);border-color:var(--line)}
+:root body.signed-in main{margin:0 28px 32px 106px;padding:0}
+:root .signed-in .dashboard-rail{left:24px;top:22px;bottom:22px;width:55px;padding:13px 6px;border-radius:30px;gap:16px;background:linear-gradient(170deg,#3b202c,#181317);background-color:#3b202c;box-shadow:0 7px 26px #39132716}
+:root .dashboard-rail .rail-brand{width:40px;height:40px;font-size:27px;margin-bottom:1px}
+:root .dashboard-rail button{width:39px;height:39px;min-height:39px;color:#c7b4bf}
+:root .dashboard-rail button.selected{background:#efb7c8;color:#451224;box-shadow:0 0 0 5px #efb7c819,0 0 24px #e56a8e36}
+:root .dashboard-rail button.selected:hover{background:#f8cede;color:#451224}
+:root .rail-links{gap:9px}
+:root .page>.card,:root .company-metric,:root .metric,:root .inventory-tile{border-radius:var(--v22-radius);box-shadow:var(--v22-shadow);border:1px solid var(--line)}
+:root .page>.card{padding:20px;margin-bottom:14px}
+:root .page h2{font-size:17px;font-weight:700;letter-spacing:-.3px}
+:root .page h3{font-size:13px}
+:root .page p{font-size:12px;line-height:1.85}
+:root .page .section-heading{align-items:center;gap:10px}
+:root .page .section-heading button{font-size:10px;min-height:34px;padding:7px 12px;border-radius:20px}
+:root .company-intro{position:relative;overflow:hidden;background:linear-gradient(110deg,#391725,#20171d);background-color:#391725;color:#fff;border:0!important}
+:root .company-intro::after{content:'';position:absolute;left:-30px;bottom:-75px;width:250px;height:160px;border:1px solid #ffffff0d;border-radius:50%;transform:rotate(-28deg);pointer-events:none}
+:root .company-intro :is(h2,p,small,.eyebrow){color:#f7e6ed}
+:root .company-intro h2{font-size:22px;color:white;margin:2px 0 5px}
+:root .company-intro p{font-size:10px;max-width:620px;margin:5px 0}
+:root .company-intro .eyebrow{font-size:9px}
+:root .company-intro #companyUpdated{font-size:9px;color:#d8bcc9}
+:root .company-intro button.secondary{background:#f3c5d4;color:#451224;border:0}
+:root .company-intro button:disabled{background:#49313e!important;color:#d7c0cd!important;border-color:#806174}
+:root .company-hero{position:relative;overflow:hidden;padding:22px;border-radius:var(--v22-radius);margin:0;display:flex;flex-direction:column;justify-content:center;min-height:240px;background:linear-gradient(150deg,#9e002b,#c90035);background-color:#c90035}
+:root .company-hero::after{content:'';position:absolute;left:-28px;bottom:-56px;width:170px;height:170px;border:25px solid #ffffff09;border-radius:50%;pointer-events:none}
+:root .company-hero>span{font-size:12px;line-height:1.9;max-width:240px}
+:root .company-hero>strong{font-size:clamp(22px,2.5vw,40px);letter-spacing:-1px;line-height:1.7;font-variant-numeric:tabular-nums}
+:root .company-hero :is(p,small){font-size:10px;line-height:1.8}
+:root .company-grid{gap:10px;margin:0}
+:root .company-metric{padding:15px;gap:5px;min-width:0}
+:root .company-metric span{font-size:10px;line-height:1.6}
+:root .company-metric strong{font-size:22px;line-height:1.45;letter-spacing:-.5px}
+:root .company-metric small{font-size:9px;line-height:1.6}
+:root #companyFinancials .company-metric{border:0;box-shadow:none;background:var(--surface)}
+:root #companyFinancials .company-metric:nth-child(2){background:var(--positive-bg)}
+:root #companyFinancials .company-metric:nth-child(3){background:var(--negative-bg)}
+:root #companyFinancials .company-metric:nth-child(2) :is(span,small){color:var(--positive)}
+:root #companyFinancials .company-metric:nth-child(3) :is(span,small){color:var(--negative)}
+:root .company-period{display:grid;grid-template-columns:1fr 1fr;gap:7px;align-content:start}
+:root .company-period>.field{min-width:0;font-size:10px;margin:8px 0 0}
+:root .company-period input{width:100%;min-width:0;margin:5px 0 0;padding:8px 7px;font-size:11px;border-radius:9px}
+:root .company-period>button{grid-column:1/-1;border-radius:24px;min-height:33px;padding:7px;font-size:11px;margin:2px 0}
+:root .company-presets{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:5px 0 0;padding:0}
+:root .company-presets button{min-height:30px;padding:6px;margin:0;font-size:9px;border-radius:8px}
+:root .dashboard-calendar{grid-column:1/-1;margin-bottom:9px}
+:root .calendar-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+:root .calendar-heading strong{font-size:15px;color:var(--ink)}
+:root .calendar-controls{display:flex;gap:5px;direction:ltr}
+:root .calendar-controls button{width:26px;min-height:26px;height:26px;margin:0;padding:0;border-radius:50%;font:20px/1 Arial,sans-serif}
+:root .calendar-weekdays,:root .calendar-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center;direction:rtl}
+:root .calendar-weekdays{font-size:8px;color:var(--muted);margin-bottom:6px;line-height:2}
+:root .calendar-days .calendar-day{margin:0;padding:0;width:100%;min-height:30px;border-radius:9px;background:transparent;font-size:11px;color:var(--ink);border:1px solid transparent}
+:root .calendar-days .calendar-day:hover{background:var(--raised);border-color:var(--field-line)}
+:root .calendar-days .calendar-day.today{border-color:var(--accent)}
+:root .calendar-days .calendar-day.in-range{background:var(--negative-bg);color:var(--accent)}
+:root .calendar-days .calendar-day[aria-pressed=true].today{background:var(--tkt-red);color:#fff}
+:root .calendar-days .calendar-day:disabled{border:0;opacity:.6;background:transparent!important}
+:root .dashboard-calendar>small{display:block;text-align:center;font-size:9px;margin-top:9px}
+:root .company-chart{min-height:190px;overflow-x:auto}
+:root .company-bar{border-radius:10px 10px 3px 3px;min-width:5px}
+:root .company-legend{font-size:9px}
+:root .company-alert{padding:11px 12px;margin:8px 0;border-radius:12px;border:0;border-inline-start:3px solid var(--accent);font-size:11px}
+:root .company-expiring-row{padding:12px 0;border-bottom:1px solid var(--line);gap:5px;font-size:11px}
+:root .company-expiring-row small{font-size:9px}
+:root .inventory-tile{padding:18px;min-height:170px}
+:root .inventory-icon{border-radius:14px;width:40px;height:40px}
+:root .inventory-value{font-size:27px;letter-spacing:-.7px}
+:root .inventory-open{font-size:10px}
+:root .v22-intro{background:radial-gradient(ellipse at 45% 45%,#4d172c,#1b1118 70%);pointer-events:none}
+:root .v22-intro .intro-logo b{background:transparent;box-shadow:none;font-size:47px}
+:root .v22-intro .intro-logo strong{font-size:15px;letter-spacing:1px}
+:root .page-outgoing{animation:v22-leave 180ms ease both}
+@keyframes v22-leave{to{opacity:0;filter:blur(4px);transform:translateY(-7px)}}
+@media(min-width:1100px){
+ :root #page-company:not([hidden]){display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px;align-items:start;direction:ltr}
+ :root #page-company>*{direction:rtl;min-width:0;grid-column:1/-1;margin:0}
+ :root #page-company>.company-intro{grid-column:1/9;grid-row:1;padding:18px 22px;height:100%}
+ :root #page-company>.company-period{grid-column:9/13;grid-row:1/3;padding:20px;height:100%}
+ :root #page-company>.company-hero{grid-column:1/4;grid-row:2;height:100%}
+ :root #page-company>#companyFinancials{grid-column:4/9;grid-row:2;display:grid;grid-template-columns:1fr 1fr;height:100%;gap:10px}
+ :root #page-company>.card:has(#companyChart){grid-column:1/9;grid-row:3;padding:20px}
+ :root #page-company>.card:has(#companyAlerts){grid-column:9/13;grid-row:3/5;padding:20px;height:100%}
+ :root #page-company>.card:has(#companyOperations){grid-column:1/9;grid-row:4}
+ :root #page-company>.card:has(#companyOperations) .company-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+ :root #page-company>.company-funds{grid-column:1/9;grid-row:5}
+ :root #page-company>.card:has(#companyRecords){grid-column:1/9;grid-row:6}
+ :root #page-company>.card:has(#companyExpenseForm){grid-column:9/13;grid-row:5/7}
+ :root .company-expense-form{grid-template-columns:1fr}
+ :root .company-expense-form>.field{width:100%;flex-basis:100%;font-size:11px}
+ :root .company-expense-form input,:root .company-expense-form select{width:100%;min-width:0;font-size:12px}
+ :root #companyStatus:not(:empty){grid-column:1/-1;grid-row:auto}
+}
+@media(min-width:761px) and (max-width:1099px){
+ :root #page-company:not([hidden]){display:grid;grid-template-columns:1fr 1fr;gap:14px}
+ :root #page-company>*{min-width:0;margin:0;grid-column:1/-1}
+ :root #page-company>.company-period,:root #page-company>.company-hero{grid-column:auto}
+ :root #companyFinancials{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:760px){
+ :root body.signed-in>header.topbar{margin:12px 12px 0 65px;padding:0 0 12px;min-height:58px;gap:6px}
+ :root .topbar .page-heading h1{font-size:16px}
+ :root .topbar .page-heading small{font-size:8px}
+ :root body.signed-in main{margin:0 12px 24px 65px}
+ :root .signed-in .dashboard-rail{left:9px;top:12px;bottom:12px;width:43px;padding:10px 4px;gap:12px}
+ :root .dashboard-rail button{width:34px;height:36px;min-height:36px}
+ :root .dashboard-rail .rail-brand{width:34px;height:36px;font-size:24px}
+ :root .rail-links{gap:8px}
+ :root .dashboard-rail button.selected{box-shadow:0 0 14px #e56a8e36}
+ :root .page>.card{padding:16px 13px;border-radius:15px}
+ :root .company-intro h2{font-size:20px}
+ :root .company-intro .section-heading{flex-wrap:wrap}
+ :root .company-intro .section-heading>div{width:100%}
+ :root .company-intro p{font-size:10px}
+ :root .company-hero{margin:14px 0;min-height:180px;padding:22px}
+ :root .company-hero>strong{font-size:34px}
+ :root #companyFinancials{grid-template-columns:1fr 1fr;gap:9px;margin:14px 0}
+ :root .company-metric{padding:13px}
+ :root .company-metric strong{font-size:20px}
+ :root .company-metric span{font-size:10px}
+ :root .company-period{gap:7px}
+ :root .calendar-days .calendar-day{min-height:34px}
+ :root .calendar-weekdays{font-size:8px}
+ :root .company-chart{min-height:170px}
+ :root .inventory-tile{min-height:145px;padding:13px}
+ :root .inventory-value{font-size:23px}
+ :root #liveCaptains{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){:root .v22-intro{display:none}:root .page-outgoing{animation:none}}
+:root #companyPeriodForm{gap:7px;align-items:start}
+:root #companyPeriodForm .calendar-controls button{width:25px;min-height:25px;height:25px;padding:0;margin:0;font:20px/1 Arial,sans-serif}
+:root #companyPeriodForm .calendar-days .calendar-day{min-height:27px;height:27px;padding:0;margin:0;font-size:10px;line-height:1}
+:root #companyPeriodForm>.field{margin:6px 0 0;font-size:10px}
+:root #companyPeriodForm input{padding:7px;font-size:11px;min-height:32px}
+:root #companyPeriodForm>button{min-height:32px;padding:6px;font-size:11px}
+:root #companyPeriodForm .company-presets{padding:0;margin:4px 0 0;gap:5px;display:grid;grid-template-columns:1fr 1fr}
+:root #companyPeriodForm .company-presets button{min-height:28px;padding:5px;margin:0;font-size:9px}
+:root .company-intro .section-heading{display:grid;grid-template-columns:1fr auto auto;gap:8px}
+@media(min-width:1100px){:root #page-company>.company-intro{min-height:110px}:root #page-company>.company-hero{min-height:285px}}
+@media(max-width:760px){:root #companyPeriodForm .calendar-days .calendar-day{min-height:36px;height:36px;font-size:11px}:root .company-intro .section-heading{grid-template-columns:1fr 1fr}:root .company-intro .section-heading>div{grid-column:1/-1}:root #companyPeriodForm .company-presets button{min-height:36px}:root #companyPeriodForm>button{min-height:40px}}
+:root #companyRecordsPeriod,:root #companyChartCaption,:root #companyExpensePermission{color:var(--muted);font-size:10px}
+@media(max-width:760px){
+ :root #page-company:not([hidden]){display:flex;flex-direction:column;gap:14px}
+ :root #page-company>*{width:100%;min-width:0;margin:0}
+ :root #page-company>.company-intro{order:0}
+ :root #page-company>.company-hero{order:1}
+ :root #page-company>#companyFinancials{order:2}
+ :root #page-company>.company-period{order:3}
+ :root #page-company>.card:has(#companyChart){order:4}
+ :root #page-company>.card:has(#companyAlerts){order:5}
+ :root #page-company>.card:has(#companyOperations){order:6}
+ :root #page-company>.company-funds{order:7}
+ :root #page-company>.card:has(#companyRecords){order:8}
+ :root #page-company>.card:has(#companyExpenseForm){order:9}
+ :root #companyStatus:empty{display:none}
+}
