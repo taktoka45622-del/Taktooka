@@ -1,0 +1,12 @@
+import {JSDOM} from 'jsdom';
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const dom=new JSDOM(fs.readFileSync('src/index.html','utf8'),{runScripts:'outside-only'});
+const {window:w}=dom,d=w.document;w.matchMedia=()=>({matches:false});w.HTMLElement.prototype.animate=()=>({});w.HTMLElement.prototype.getAnimations=()=>[];
+w.eval(fs.readFileSync('src/dashboard-motion.js','utf8'));
+const source=d.querySelector('#navigation [data-page="company"]'),rail=d.querySelector('.rail-links button');let clicks=0;source.onclick=()=>clicks++;rail.click();assert.equal(clicks,1);
+source.hidden=true;source.classList.add('selected');await new Promise(r=>setTimeout(r,0));assert.equal(rail.hidden,true);assert.equal(rail.getAttribute('aria-current'),'page');
+source.hidden=false;source.classList.remove('selected');await new Promise(r=>setTimeout(r,0));assert.equal(rail.hidden,false);assert.equal(rail.hasAttribute('aria-current'),false);
+assert.equal(d.querySelectorAll('.rail-links button').length,d.querySelectorAll('#navigation button[data-page]').length);
+d.querySelector('#page-company').hidden=false;await new Promise(r=>setTimeout(r,0));assert.equal(d.querySelectorAll('.dashboard-rail').length,1);
+dom.window.close();console.log('PASS: rail permissions, existing navigation actions, selection and page animation');
