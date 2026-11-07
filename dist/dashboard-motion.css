@@ -97,3 +97,9 @@ body:not(.signed-in) .dashboard-theme-toggle{background:#251a20;color:#fff}
 [data-theme=dark] body:not(.signed-in)>header.topbar{background:#21171e;border-color:#3b2834}[data-theme=dark] body:not(.signed-in) .topbar .page-heading h1,[data-theme=dark] #login h2{color:#f5e7f0}
 @media(max-width:760px){.dashboard-theme-toggle{width:30px;min-height:32px;padding:5px;border-radius:50%;flex-basis:30px}.dashboard-theme-toggle span{display:none}.dashboard-theme-toggle svg{width:17px;height:17px}.topbar .page-heading h1{overflow-wrap:anywhere}}
 [data-theme=dark] .eyebrow,[data-theme=dark] .inventory-open,[data-theme=dark] .price-result,[data-theme=dark] #staffFormStatus{color:#ff87a6}
+
+.tkt-build-startup #admin,.tkt-build-startup dialog.section-screen,.tkt-build-startup #detailDialog{visibility:hidden}
+[data-build-pending]{visibility:hidden}
+.page[data-initial-loading]>.tkt-skeleton{visibility:hidden!important}
+.tkt-reference-stage{overflow:visible;contain:none;pointer-events:none!important}.tkt-sim-cursor{opacity:0}.tkt-build-box{opacity:0}
+@media(prefers-reduced-motion:reduce){[data-build-pending]{visibility:visible}}
