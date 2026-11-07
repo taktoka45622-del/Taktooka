@@ -69,28 +69,37 @@ function paintEntry(surface,run,entry,index,start){
  const root=surface.getBoundingClientRect(),rect=entry.node.getBoundingClientRect(),lane=index%cursorColors.length;
  const x=rect.left-root.left+(surface.scrollLeft||0),y=rect.top-root.top+(surface.scrollTop||0),width=rect.width,height=Math.min(rect.height,600);
  const previous=run.anchors[lane]||{x:Math.max(8,root.width*(lane+1)/18),y:18};run.anchors[lane]={x,y};
- const elapsed=performance.now()-run.started,delay=Math.max(0,start-elapsed),pose=(left,top)=>`translate3d(${Math.round(left)}px,${Math.round(top)}px,0)`;
+ const delay=start,pose=(left,top)=>`translate3d(${Math.round(left)}px,${Math.round(top)}px,0)`;
  const cursor=run.cursors[lane];
  const frames=[{offset:0,opacity:0,transform:pose(previous.x,previous.y)},{offset:.16,opacity:1,transform:pose(x,y)},{offset:.34,opacity:1,transform:pose(x+width,y)},{offset:.53,opacity:1,transform:pose(x+width,y+height)},{offset:.71,opacity:1,transform:pose(x,y+height)},{offset:.86,opacity:1,transform:pose(x,y)},{offset:1,opacity:0,transform:pose(x,y)}];
- const pointer=play(cursor,frames,{duration:950,delay,easing:'linear',fill:'none'});if(pointer)run.animations.push(pointer);
+ if(entry.assist){
+  const edge=fraction=>{const p=((fraction%1)+1)%1*4;if(p<1)return{x:x+width*p,y};if(p<2)return{x:x+width,y:y+height*(p-1)};if(p<3)return{x:x+width*(3-p),y:y+height};return{x,y:y+height*(4-p)};};
+  for(let step=1;step<=5;step++){const point=edge(lane/17+(step-1)/4);frames[step].transform=pose(point.x,point.y);}
+  frames[6].transform=frames[5].transform;const end=edge(lane/17);run.anchors[lane]=end;
+ }
+ const pointer=play(cursor,frames,{duration:run.jobDuration,delay,easing:'linear',fill:'none'});if(pointer){if(run.timelineStart!=null)pointer.startTime=run.timelineStart;run.animations.push(pointer);}if(entry.assist)return;
  const wire=document.createElement('div');wire.className='tkt-build-box';wire.dataset.worker=String(lane);wire.style.cssText=`left:${x}px;top:${y}px;width:${width}px;height:${height}px;color:${cursorColors[lane]}`;
  for(let n=0;n<8;n++)wire.append(document.createElement('i'));const label=document.createElement('span');label.textContent=Math.round(rect.width)+' × '+Math.round(rect.height);wire.append(label);run.stage.append(wire);
- const outline=play(wire,[{opacity:0,offset:0},{opacity:.85,offset:.16},{opacity:.85,offset:.85},{opacity:0,offset:1}],{duration:1000,delay,easing:'linear',fill:'both'});if(outline)run.animations.push(outline);
- const reveal=play(entry.node,[{opacity:0,visibility:'hidden',clipPath:'inset(0 0 100% 0)',offset:0},{opacity:0,visibility:'visible',clipPath:'inset(0 0 100% 0)',offset:.01},{opacity:1,visibility:'visible',clipPath:'inset(0 0 0% 0)',offset:1}],{duration:700,delay:delay+180,easing:'cubic-bezier(.2,.7,.3,1)',fill:'both'});
- if(reveal){run.animations.push(reveal);reveal.finished?.then(()=>{if(surfaceRuns.get(surface)!==run)return;entry.node.removeAttribute('data-build-pending');reveal.cancel?.();}).catch(()=>{});}
+ const outline=play(wire,[{opacity:0,offset:0},{opacity:.85,offset:.16},{opacity:.85,offset:.85},{opacity:0,offset:1}],{duration:run.jobDuration,delay,easing:'linear',fill:'both'});if(outline){if(run.timelineStart!=null)outline.startTime=run.timelineStart;run.animations.push(outline);}
+ const reveal=play(entry.node,[{opacity:0,visibility:'hidden',clipPath:'inset(0 0 100% 0)',offset:0},{opacity:0,visibility:'visible',clipPath:'inset(0 0 100% 0)',offset:.01},{opacity:1,visibility:'visible',clipPath:'inset(0 0 0% 0)',offset:1}],{duration:run.jobDuration*.7,delay:delay+run.jobDuration*.18,easing:'cubic-bezier(.2,.7,.3,1)',fill:'both'});
+ if(reveal){if(run.timelineStart!=null)reveal.startTime=run.timelineStart;run.animations.push(reveal);reveal.finished?.then(()=>{if(surfaceRuns.get(surface)!==run)return;entry.node.removeAttribute('data-build-pending');reveal.cancel?.();}).catch(()=>{});}
  outline?.finished?.then(()=>wire.remove()).catch(()=>{});
 }
 function enterPage(surface){
  if(surface.hidden||surface.hasAttribute('data-initial-loading')||reduced.matches||!signed||surfaceRuns.has(surface))return;
  const entries=assemblyTargets(surface);if(!entries.length)return;
  for(const entry of entries)entry.node.setAttribute('data-build-pending','');
- const run={entries,animations:[],timers:[],anchors:[],available:Array(17).fill(0),started:performance.now(),stage:null};surfaceRuns.set(surface,run);surface.classList.add('motion-assembling');createReferenceStage(surface,entries.map(e=>e.node),run);
- entries.forEach((entry,index)=>{const lane=index%17,parent=entry.parent===null?null:entries[entry.parent];entry.start=Math.min(15100,Math.max(350+index*14000/Math.max(entries.length-1,1),parent?parent.start+700:0,run.available[lane]));run.available[lane]=entry.start+1000;paintEntry(surface,run,entry,index,entry.start);});
+ const waveCount=Math.ceil(entries.length/17),waveSpan=(buildDuration-350)/waveCount;const run={entries,animations:[],timers:[],anchors:[],available:Array(17).fill(0),started:performance.now(),timelineStart:document.timeline?.currentTime,jobDuration:waveSpan-40,stage:null};surfaceRuns.set(surface,run);surface.classList.add('motion-assembling');createReferenceStage(surface,entries.map(e=>e.node),run);
+ for(let wave=0;wave<waveCount;wave++){
+  const group=entries.slice(wave*17,wave*17+17),start=350+wave*waveSpan;
+  group.forEach((entry,lane)=>{entry.start=start;run.available[lane]=start+waveSpan;paintEntry(surface,run,entry,lane,start);});
+  for(let lane=group.length;lane<17;lane++){const entry=group[lane%group.length];run.available[lane]=start+waveSpan;paintEntry(surface,run,{...entry,assist:true},lane,start);}
+ }
  run.observer=new MutationObserver(records=>{
   const added=[];for(const record of records)for(const node of record.addedNodes){if(node.nodeType!==1||node.closest('.tkt-reference-stage,.leaflet-container,.admin-map,.number-roll')||node.matches('.tkt-reference-stage,.number-roll,.tkt-skeleton')||node.closest('[data-build-pending]')||node.hidden)continue;if(added.some(parent=>parent.contains(node)))continue;added.push(node);}
-  for(const node of added){node.setAttribute('data-build-pending','');const entry={node,parent:null,panel:false};run.entries.push(entry);const index=run.available.indexOf(Math.min(...run.available)),start=Math.max(performance.now()-run.started+120,run.available[index]);if(start<15500){run.available[index]=start+1000;paintEntry(surface,run,entry,index,start);}}
+  for(const node of added){node.setAttribute('data-build-pending','');const entry={node,parent:null,panel:false};run.entries.push(entry);const index=run.available.indexOf(Math.min(...run.available)),start=Math.max(performance.now()-run.started+120,run.available[index]);if(start<15500){run.available[index]=start+run.jobDuration;paintEntry(surface,run,entry,index,start);}}
  });run.observer.observe(surface,{childList:true,subtree:true});
- const clock=play(run.stage,[{opacity:1},{opacity:1}],{duration:buildDuration,easing:'linear',fill:'both'});if(clock){run.animations.push(clock);clock.finished?.then(()=>{if(surfaceRuns.get(surface)===run)finishSurface(surface);}).catch(()=>{});}else finishSurface(surface);
+ const clock=play(run.stage,[{opacity:1},{opacity:1}],{duration:buildDuration,easing:'linear',fill:'both'});if(clock){if(run.timelineStart!=null)clock.startTime=run.timelineStart;run.animations.push(clock);clock.finished?.then(()=>{if(surfaceRuns.get(surface)===run)finishSurface(surface);}).catch(()=>{});}else finishSurface(surface);
 }
 function sync(){for(const [source,item]of pairs){item.hidden=source.hidden;item.classList.toggle('selected',source.classList.contains('selected'));if(source.classList.contains('selected'))item.setAttribute('aria-current','page');else item.removeAttribute('aria-current');}const next=document.body.classList.contains('signed-in');const previous=signed,first=next&&!previous;signed=next;if(first)intro();if(!next&&previous){stopIntro();closeTools();stopAllSurfaces();}}
 new MutationObserver(sync).observe(document.getElementById('navigation'),{subtree:true,attributes:true,attributeFilter:['hidden','class']});new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['class']});
