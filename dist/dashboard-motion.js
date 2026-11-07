@@ -1,26 +1,43 @@
-const icons={company:'◈',lines:'⇄',inventory:'▦',staff:'♙',exchanges:'⇆',overview:'◎',wheel:'◉',banners:'▧',pricing:'≋',rides:'➜',applications:'▣',users:'♧',coverage:'⌖',commerce:'％','restaurant-support':'♨',finance:'▤',rewards:'◇',support:'☏',favorites:'☆',security:'⊙',audit:'≡',server:'⌁'};
-const rail=document.createElement('nav');
-rail.className='dashboard-rail';rail.setAttribute('aria-label','أقسام تكتوكة');
-const brand=document.createElement('button');brand.type='button';brand.className='rail-brand';brand.textContent='ت';brand.title='قائمة تكتوكة';brand.setAttribute('aria-label','فتح قائمة تكتوكة');brand.onclick=()=>document.getElementById('menuToggle').click();rail.append(brand);
-const links=document.createElement('div');links.className='rail-links';rail.append(links);
-const pairs=[];
-for(const source of document.querySelectorAll('#navigation button[data-page]')){
- const item=document.createElement('button');item.type='button';item.textContent=icons[source.dataset.page]||'◈';item.title=source.textContent;item.setAttribute('aria-label',source.textContent);item.onclick=()=>source.click();links.append(item);pairs.push([source,item]);
-}
+const paths={company:'M3 3h7v7H3z M14 3h7v11h-7z M3 14h7v7H3z M14 18h7',lines:'M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4',inventory:'M3 3h18v18H3zM3 9h18M9 9v12M15 9v12',staff:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M17 4a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-4',exchanges:'M3 6h18M5 3v18M19 3v18M3 18h18M9 9h6v6H9z',overview:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8',wheel:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 3v18M3 12h18M6 6l12 12M6 18 18 6',banners:'M3 3h18v18H3zM3 17l6-6 4 4 3-3 5 5M16 7h.01',pricing:'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6',rides:'M4 8h16l2 7H2l2-7zM5 8l2-5h10l2 5M5 15v5M19 15v5M6 12h.01M18 12h.01',applications:'M6 3h12v18H6zM9 7h6M9 11h6M9 15h4',users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M17 4a4 4 0 0 1 0 8',coverage:'M12 21s7-7 7-12A7 7 0 0 0 5 9c0 5 7 12 7 12zM12 6a3 3 0 1 0 0 6 3 3 0 0 0 0-6',commerce:'M4 20 20 4M7 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6M17 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6','restaurant-support':'M4 3v7a3 3 0 0 0 6 0V3M7 3v18M20 21V3c-4 2-5 8 0 9',finance:'M3 5h18v15H3zM3 5V3h14M15 10h6v5h-6z',rewards:'M3 8h18v4a3 3 0 0 0 0 6v3H3v-3a3 3 0 0 0 0-6V8zM12 8v13',support:'M4 14v-3a8 8 0 0 1 16 0v3M4 11H2v7h5v-7H4M20 11h2v7h-5v-7h3M20 18v3h-6',favorites:'m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z',security:'m12 2 9 4v6c0 6-9 10-9 10S3 18 3 12V6l9-4zM8 12l3 3 5-6',audit:'M5 3h14v18H5zM8 7h8M8 12h8M8 17h5',server:'M3 3h18v7H3zM3 14h18v7H3zM7 6h.01M7 17h.01'};
+function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.6');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]||paths.company);svg.append(path);return svg;}
+const rail=document.createElement('nav');rail.className='dashboard-rail';rail.setAttribute('aria-label','أقسام تكتوكة');
+const brand=document.createElement('button');brand.type='button';brand.className='rail-brand';brand.textContent='ت';brand.setAttribute('aria-label','فتح قائمة تكتوكة');brand.title='قائمة تكتوكة';brand.onclick=()=>document.getElementById('menuToggle').click();rail.append(brand);
+const links=document.createElement('div');links.className='rail-links';rail.append(links);const pairs=[];
+for(const source of document.querySelectorAll('#navigation button[data-page]')){const item=document.createElement('button');item.type='button';item.append(icon(source.dataset.page));item.title=source.textContent;item.setAttribute('aria-label',source.textContent);item.onclick=()=>source.click();links.append(item);pairs.push([source,item]);}
 document.body.append(rail);
+const header=document.querySelector('header.topbar'),tools=header.querySelector('.header-actions');
+const toolsButton=document.createElement('button');toolsButton.type='button';toolsButton.className='dashboard-tools-button';toolsButton.textContent='•••';toolsButton.setAttribute('aria-label','أدوات الإدارة');toolsButton.setAttribute('aria-expanded','false');tools.id='dashboardTools';toolsButton.setAttribute('aria-controls',tools.id);tools.hidden=true;header.append(toolsButton);
+function closeTools(){tools.hidden=true;toolsButton.setAttribute('aria-expanded','false');}
+toolsButton.onclick=()=>{const open=tools.hidden;tools.hidden=!open;toolsButton.setAttribute('aria-expanded',String(open));};
+document.addEventListener('click',event=>{if(!tools.contains(event.target)&&!toolsButton.contains(event.target))closeTools();});document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!tools.hidden){closeTools();toolsButton.focus();}});
 const reduced=window.matchMedia('(prefers-reduced-motion: reduce)');
-let signed=false;
-function sync(){
- for(const [source,item]of pairs){item.hidden=source.hidden;item.classList.toggle('selected',source.classList.contains('selected'));if(source.classList.contains('selected'))item.setAttribute('aria-current','page');else item.removeAttribute('aria-current');}
- const next=document.body.classList.contains('signed-in');
- if(next&&!signed&&!reduced.matches){document.querySelector('main').animate([{clipPath:'circle(0% at 50% 32%)',opacity:0},{clipPath:'circle(150% at 50% 32%)',opacity:1}],{duration:950,easing:'cubic-bezier(.22,1,.36,1)'});}
- signed=next;
+let signed=false,introTimer,introAnimation,outgoing;
+const animations=new Map(),rollTimers=new Map();
+function play(node,frames,options){if(!node.animate)return null;const animation=node.animate(frames,options);return animation;}
+function clearOutgoing(){if(outgoing){outgoing.remove();outgoing=null;}}
+function stopIntro(){clearTimeout(introTimer);introAnimation?.cancel?.();introAnimation=null;document.querySelector('.dashboard-intro')?.remove();document.body.classList.remove('dashboard-entering');}
+function intro(){if(reduced.matches)return;stopIntro();const cover=document.createElement('div');cover.className='dashboard-intro';cover.setAttribute('aria-hidden','true');const logo=document.createElement('div');logo.className='intro-logo';logo.innerHTML='<b>ت</b><strong>تكتوكة</strong><small>لوحة الإدارة</small>';cover.append(logo);document.body.append(cover);document.body.classList.add('dashboard-entering');introTimer=setTimeout(()=>{logo.style.opacity='0';introAnimation=play(cover,[{'--intro-radius':'0px'},{'--intro-radius':Math.ceil(Math.hypot(window.innerWidth,window.innerHeight))+'px'}],{duration:750,easing:'cubic-bezier(.65,0,.2,1)',fill:'forwards'});if(introAnimation?.finished)introAnimation.finished.then(stopIntro).catch(()=>{});else stopIntro();},420);}
+function rollNumbers(page){
+ for(const node of page.querySelectorAll('.company-metric strong,.company-hero>strong,.metric>strong,.inventory-value')){
+  if(node.querySelector('.number-roll'))continue;const raw=node.textContent,match=raw.match(/^(\s*)([\d,]+(?:\.\d+)?)(.*)$/s);if(!match)continue;const end=Number(match[2].replaceAll(',',''));if(!Number.isFinite(end)||end<=0)continue;
+  const reel=document.createElement('span');reel.className='number-roll';reel.setAttribute('aria-hidden','true');const precision=match[2].includes('.')?match[2].split('.')[1].length:0;
+  for(let i=0;i<9;i++){const line=document.createElement('span');line.textContent=i===8?raw:match[1]+new Intl.NumberFormat('en-US',{maximumFractionDigits:precision}).format(Math.floor(end*i/8))+match[3];reel.append(line);}
+  node.classList.add('rolling-value');node.append(reel);const cleanup=()=>{reel.remove();node.classList.remove('rolling-value');rollTimers.delete(node);};rollTimers.set(node,setTimeout(cleanup,800));
+ }
 }
-new MutationObserver(sync).observe(document.getElementById('navigation'),{subtree:true,attributes:true,attributeFilter:['hidden','class']});
-new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['class']});
-for(const page of document.querySelectorAll('.page'))new MutationObserver(()=>{
- if(page.hidden||reduced.matches)return;
- const cards=[...page.children].filter(el=>el.matches('.card,.company-hero,.company-grid,.inventory-cards,.metrics'));
- cards.forEach((card,index)=>{card.getAnimations().forEach(a=>a.cancel());card.animate([{opacity:0,transform:'translateY(22px) scale(.975)',filter:'blur(5px)'},{opacity:1,transform:'translateY(0) scale(1)',filter:'blur(0)'}],{duration:620,delay:Math.min(index*65,325),easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards'});});
-}).observe(page,{attributes:true,attributeFilter:['hidden']});
+function enterPage(page){
+ if(page.hidden||page.hasAttribute('data-initial-loading')||reduced.matches)return;
+ const old=animations.get(page)||[];old.forEach(a=>a?.cancel());const running=[];
+ const cards=[...page.querySelectorAll(':scope > .card,:scope > .company-hero,:scope > .company-grid > .company-metric,:scope > .inventory-cards > .inventory-tile,:scope > .metrics > .metric')];
+ for(const [index,card]of cards.entries())running.push(play(card,[{opacity:0,transform:'translateY(18px) scale(.985)',filter:'blur(5px)'},{opacity:1,transform:'translateY(0) scale(1)',filter:'blur(0)'}],{duration:520,delay:80+Math.min(index,9)*48,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards'}));
+ animations.set(page,running);rollNumbers(page);
+}
+function sync(){for(const [source,item]of pairs){item.hidden=source.hidden;item.classList.toggle('selected',source.classList.contains('selected'));if(source.classList.contains('selected'))item.setAttribute('aria-current','page');else item.removeAttribute('aria-current');}const next=document.body.classList.contains('signed-in');if(next&&!signed)intro();if(!next&&signed){stopIntro();closeTools();clearOutgoing();}signed=next;}
+new MutationObserver(sync).observe(document.getElementById('navigation'),{subtree:true,attributes:true,attributeFilter:['hidden','class']});new MutationObserver(sync).observe(document.body,{attributes:true,attributeFilter:['class']});
+document.addEventListener('taktooka:page-leave',event=>{closeTools();clearOutgoing();const page=event.detail?.page;if(page)for(const [node,timer]of rollTimers){if(page.contains(node)){clearTimeout(timer);node.querySelector('.number-roll')?.remove();node.classList.remove('rolling-value');rollTimers.delete(node);}}if(!page||page.hidden||reduced.matches||!signed)return;const rect=page.getBoundingClientRect();if(!rect.width)return;const copy=page.cloneNode(true);for(const node of [copy,...copy.querySelectorAll('[id]')])node.removeAttribute('id');const layout=getComputedStyle(page);Object.assign(copy.style,{display:layout.display,gridTemplateColumns:layout.gridTemplateColumns,gap:layout.gap});[...page.children].forEach((node,index)=>{const style=getComputedStyle(node);Object.assign(copy.children[index].style,{gridColumn:style.gridColumn,gridRow:style.gridRow,margin:style.margin,padding:style.padding});});copy.classList.add('page-outgoing');copy.setAttribute('aria-hidden','true');copy.inert=true;Object.assign(copy.style,{top:rect.top+'px',left:rect.left+'px',width:rect.width+'px',height:rect.height+'px'});document.body.append(copy);outgoing=copy;const fade=play(copy,[{opacity:1,filter:'blur(0)',transform:'translateY(0)'},{opacity:0,filter:'blur(8px)',transform:'translateY(-8px)'}],{duration:220,easing:'ease-out',fill:'forwards'});fade?.finished?.then(()=>{if(outgoing===copy)clearOutgoing();}).catch(()=>copy.remove());if(!fade?.finished)setTimeout(()=>{if(outgoing===copy)clearOutgoing();},240);});
+for(const page of document.querySelectorAll('.page'))new MutationObserver(records=>{
+ if(page.hidden){(animations.get(page)||[]).forEach(a=>a?.cancel());return;}
+ if(records.some(record=>record.attributeName==='hidden'||record.attributeName==='data-initial-loading'&&!page.hasAttribute('data-initial-loading')))enterPage(page);
+}).observe(page,{attributes:true,attributeFilter:['hidden','data-initial-loading']});
+reduced.addEventListener?.('change',()=>{if(reduced.matches){stopIntro();clearOutgoing();for(const values of animations.values())values.forEach(a=>a?.cancel());for(const [node,timer]of rollTimers){clearTimeout(timer);node.querySelector('.number-roll')?.remove();node.classList.remove('rolling-value');}rollTimers.clear();}});
 sync();
