@@ -108,11 +108,45 @@ function createInventoryAccounts() {
   dialog.append(head, body);
   document.body.append(dialog);
 
+  const receiptDialog = node('dialog', null, 'inventory-finance-dialog inventory-receipt-dialog');
+  receiptDialog.setAttribute('aria-labelledby', 'inventoryReceiptTitle');
+  const receiptHead = node('div', null, 'inventory-finance-dialog-head');
+  const receiptTitle = node('h2', 'تسجيل تسديد المستحقات', '');
+  receiptTitle.id = 'inventoryReceiptTitle';
+  const receiptClose = node('button', 'إغلاق', 'secondary');
+  receiptClose.type = 'button';
+  receiptClose.onclick = () => receiptDialog.close();
+  receiptHead.append(receiptTitle, receiptClose);
+  const receiptBody = node('div', null, 'inventory-finance-dialog-body');
+  const receiptForm = node('form', null, 'inventory-receipt-form');
+  const receiptInfo = node('div', null, 'inventory-finance-callout');
+  const amountLabel = node('label', 'المبلغ المستلم فعليًا بالدينار', 'field');
+  const receiptAmount = node('input');
+  receiptAmount.type = 'text';
+  receiptAmount.inputMode = 'numeric';
+  receiptAmount.required = true;
+  amountLabel.append(receiptAmount);
+  const noteLabel = node('label', 'ملاحظة التسديد — اختياري', 'field');
+  const receiptNote = node('input');
+  receiptNote.maxLength = 240;
+  receiptNote.placeholder = 'مثلاً: استلام نقدي';
+  noteLabel.append(receiptNote);
+  const receiptStatus = node('p', '', 'inventory-finance-status');
+  receiptStatus.setAttribute('role', 'status');
+  const receiptSubmit = node('button', 'تأكيد استلام المبلغ وتصفير المستحق', 'primary');
+  receiptSubmit.type = 'submit';
+  receiptForm.append(receiptInfo, amountLabel, noteLabel, receiptStatus, receiptSubmit);
+  receiptBody.append(node('p', 'سجّل المبلغ الذي استلمته فعليًا. التصفير متاح عند إدخال كامل المستحق؛ تحفظ الحركة وتاريخها باسم المسؤول.', 'inventory-finance-description'), receiptForm);
+  receiptDialog.append(receiptHead, receiptBody);
+  document.body.append(receiptDialog);
+
   let summary = null;
   let currentCategory = '';
   let currentOffset = 0;
   let hasMore = false;
   let loadedRows = [];
+  let receiptTarget = null;
+  let receiptRequest = null;
   let listRequest = 0;
   let summaryRequest = 0;
   const values = new Map();
@@ -122,6 +156,67 @@ function createInventoryAccounts() {
     if (error) throw error;
     return result;
   }
+
+  function parseMoney(value) {
+    const normalized = String(value || '').replace(/[٠-٩]/g, char => String(char.charCodeAt(0) - 0x660)).replace(/[۰-۹]/g, char => String(char.charCodeAt(0) - 0x6F0));
+    const digits = normalized.replace(/[,٬\s]/g, '');
+    return /^\d+$/.test(digits) ? Number(digits) : NaN;
+  }
+
+  async function openReceipt(item) {
+    const kind = currentCategory === 'restaurant_service_due' ? 'restaurant_fee' : 'captain_company';
+    const groupId = kind === 'restaurant_fee' ? item.restaurant_id || item.owner_id : item.user_id;
+    if (!groupId) return;
+    receiptTarget = { kind, groupId, item };
+    receiptRequest = crypto.randomUUID();
+    receiptTitle.textContent = kind === 'restaurant_fee' ? `تسديد مستحقات ${item.name || 'المطعم'}` : `تسديد مستحقات ${item.captain_name || 'الكابتن'}`;
+    receiptInfo.replaceChildren(node('strong', 'جاري جلب المستحق الحالي…'));
+    receiptAmount.value = '';
+    receiptNote.value = '';
+    receiptStatus.textContent = '';
+    receiptSubmit.disabled = true;
+    if (!receiptDialog.open) receiptDialog.showModal();
+    try {
+      const preview = await rpc('receipt_preview', { kind, group_id: groupId });
+      if (receiptTarget?.groupId !== groupId || !receiptDialog.open) return;
+      receiptTarget.due = Number(preview.amount) || 0;
+      receiptInfo.replaceChildren(node('strong', `المستحق الكامل: ${money(receiptTarget.due)}`), node('span', 'أدخل المبلغ المستلم كاملًا حتى يُغلق المستحق.' ));
+      receiptAmount.value = String(receiptTarget.due);
+      receiptSubmit.disabled = receiptTarget.due <= 0;
+      if (receiptTarget.due <= 0) receiptStatus.textContent = 'ماكو مستحق مفتوح لهذا الحساب.';
+    } catch (error) {
+      receiptInfo.replaceChildren(node('strong', error?.message || 'تعذر جلب المستحق الحالي.'));
+      receiptSubmit.disabled = true;
+    }
+  }
+
+  receiptForm.onsubmit = event => {
+    event.preventDefault();
+    if (!receiptTarget || receiptSubmit.disabled) return;
+    const amount = parseMoney(receiptAmount.value);
+    if (!Number.isSafeInteger(amount) || amount <= 0 || amount !== receiptTarget.due) {
+      receiptStatus.textContent = `المبلغ لازم يساوي كامل المستحق الحالي: ${money(receiptTarget.due)}.`;
+      return;
+    }
+    receiptSubmit.disabled = true;
+    receiptStatus.textContent = 'جاري حفظ التسديد…';
+    const target = receiptTarget;
+    const requestId = receiptRequest;
+    rpc('record_receipt', { id: requestId, kind: target.kind, group_id: target.groupId, amount, note: receiptNote.value.trim() })
+      .then(async () => {
+        receiptDialog.close();
+        await loadSummary();
+        if (dialog.open) await loadRows(true);
+      })
+      .catch(error => {
+        receiptStatus.textContent = error?.message === 'AMOUNT_CHANGED'
+          ? 'تغيّر المستحق قبل الحفظ. حدّث التفاصيل وأعد المحاولة.'
+          : error?.message === 'NOTHING_DUE'
+            ? 'ماكو مستحق مفتوح لهذا الحساب.'
+            : error?.message || 'تعذر تسجيل التسديد؛ لم تُحفظ الحركة.';
+        receiptSubmit.disabled = false;
+      });
+  };
 
   function drawCards() {
     if (!summary) return;
@@ -149,6 +244,13 @@ function createInventoryAccounts() {
         facts.append(wrapper);
       }
       article.append(facts);
+      if (currentCategory === 'restaurant_service_due' || currentCategory === 'taxi_commission_due' || currentCategory === 'food_commission_due') {
+        const settle = node('button', currentCategory === 'restaurant_service_due' ? 'تسجيل الاستلام وتصفير المستحق' : 'تسديد مستحقات الكابتن');
+        settle.type = 'button';
+        settle.className = 'primary inventory-receipt-action';
+        settle.onclick = () => openReceipt(item);
+        article.append(settle);
+      }
       const contacts = currentCategory === 'restaurant_service_due'
         ? [['اتصال بالمطعم', item.phone], ['اتصال بصاحب المطعم', item.owner_phone]]
         : [['اتصال', item.phone || item.captain_phone || item.customer_phone || item.restaurant_phone || item.person_phone || item.personal_phone]];
@@ -206,8 +308,8 @@ function createInventoryAccounts() {
     const accountingTarget = document.querySelector(`[data-page="${spec.key === 'exchange_funds' ? 'exchanges' : 'commerce'}"]`);
     openAccounting.hidden = !['restaurant_service_due', 'taxi_commission_due', 'food_commission_due', 'exchange_funds'].includes(spec.key) || !accountingTarget || accountingTarget.hidden;
     if (summary) callout.append(node('strong', inventoryFinanceValue(spec, summary[spec.key]), 'inventory-finance-total'));
-    if (spec.key === 'restaurant_service_due') callout.append(node('span', 'اضغط متابعة التسديد والتصفير لفتح سجلات التسديد الحالية وإجراءات اعتماد الاستلام.'));
-    if (['taxi_commission_due', 'food_commission_due'].includes(spec.key)) callout.append(node('span', 'إجراءات تأكيد التسديد متاحة من صفحة النسب ورسوم الخدمة.'));
+    if (spec.key === 'restaurant_service_due') callout.append(node('span', 'من بطاقة المطعم افتح التسوية، أدخل المبلغ المستلم كاملًا، وسيبقى سجل الحركة محفوظًا.'));
+    if (['taxi_commission_due', 'food_commission_due'].includes(spec.key)) callout.append(node('span', 'تسوية الكابتن تجمع مستحقات نسبته على التكسي والطعام في حركة واحدة.'));
     if (spec.key === 'exchange_funds') callout.append(node('span', 'فتح الصيرفات يعرض الحسابات والمعاملات وسجل التسديد.'));
     if (!dialog.open) dialog.showModal();
     await loadRows(true);
