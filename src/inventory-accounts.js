@@ -29,7 +29,7 @@ function detailsFor(item, category) {
     captains_weekly: [field('الاسم', item.name), field('الهاتف', item.phone), field('نوع الاشتراك', 'أسبوعي'), field('المركبة', item.vehicle), field('الاشتراك ينتهي', formatDate(item.expires_at)), field('آخر رحلة', formatDate(item.last_ride_at))],
     captains_commission: [field('الاسم', item.name), field('الهاتف', item.phone), field('النظام', 'نسبة على الطلبات'), field('المركبة', item.vehicle), field('آخر رحلة', formatDate(item.last_ride_at))],
     captains_no_ride_2d: [field('الاسم', item.name), field('الهاتف', item.phone), field('النظام', item.plan === 'commission' ? 'نسبة' : 'اشتراك أسبوعي'), field('المركبة', item.vehicle), field('آخر رحلة مسجلة', formatDate(item.last_ride_at)), field('تاريخ التسجيل', formatDate(item.created_at))],
-    restaurant_service_due: [field('المطعم / الحساب', item.name), field('هاتف التواصل', item.phone), field('العنوان', item.address), field('الرصيد المستحق', money(item.amount)), field('عدد القيود', count(item.debt_count)), field('آخر قيد', formatDate(item.last_debt_at)), ...(item.legacy_unlinked ? [field('ملاحظة', 'قيد مالي سابق بقي محفوظًا بعد حذف سجل المطعم؛ الاسم المعروض هو حساب المالك')]:[])],
+    restaurant_service_due: [field('اسم المطعم / الحساب', item.name), field('هاتف المطعم', item.phone), field('اسم صاحب المطعم', item.owner_name), field('هاتف صاحب المطعم', item.owner_phone), field('العنوان', item.address), field('الرصيد المستحق', money(item.amount)), field('عدد القيود', count(item.debt_count)), field('آخر قيد', formatDate(item.last_debt_at)), ...(item.legacy_unlinked ? [field('ملاحظة', 'قيد مالي سابق بقي محفوظًا بعد حذف سجل المطعم؛ الاسم المعروض هو حساب المالك')]:[])],
     taxi_commission_due: [field('الكابتن', item.captain_name), field('هاتف الكابتن', item.captain_phone), field('العمولة', money(item.amount)), field('مرجع الرحلة', item.source_id), field('مسار الرحلة', item.source_label), field('تاريخ الرحلة', formatDate(item.source_created_at)), field('تاريخ احتساب العمولة', formatDate(item.created_at))],
     food_commission_due: [field('الكابتن', item.captain_name), field('هاتف الكابتن', item.captain_phone), field('العمولة', money(item.amount)), field('رقم طلب الطعام', item.source_id), field('تاريخ الطلب', formatDate(item.source_created_at)), field('تاريخ احتساب العمولة', formatDate(item.created_at))],
     exchange_funds: [field('اسم الصيرفة', item.name), field('هاتف الصيرفة', item.phone), field('صاحب الصيرفة', item.personal_name), field('هاتف صاحب الصيرفة', item.personal_phone), field('المحافظة', item.province), field('المنطقة', item.area), field('العنوان', item.street), field('الرصيد المخزون', money(item.balance)), field('الحالة', item.active ? 'فعالة' : 'متوقفة'), field('تاريخ التسجيل', formatDate(item.created_at))],
@@ -149,21 +149,27 @@ function createInventoryAccounts() {
         facts.append(wrapper);
       }
       article.append(facts);
-      const contactPhone = item.phone || item.captain_phone || item.customer_phone || item.restaurant_phone || item.person_phone || item.personal_phone;
-      if (contactPhone) {
+      const contacts = currentCategory === 'restaurant_service_due'
+        ? [['اتصال بالمطعم', item.phone], ['اتصال بصاحب المطعم', item.owner_phone]]
+        : [['اتصال', item.phone || item.captain_phone || item.customer_phone || item.restaurant_phone || item.person_phone || item.personal_phone]];
+      if (contacts.some(([, value]) => value)) {
         const actions = node('div', null, 'controls inventory-finance-contact');
-        const tel = node('a', 'اتصال');
-        tel.href = `tel:${contactPhone}`;
-        tel.className = 'secondary';
-        const digits = phoneDigits(contactPhone);
-        if (digits.length >= 10) {
-          const wa = node('a', 'واتساب');
-          wa.href = `https://wa.me/${digits.startsWith('0') ? `964${digits.slice(1)}` : digits}`;
-          wa.target = '_blank';
-          wa.rel = 'noopener';
-          wa.className = 'secondary';
-          actions.append(tel, wa);
-        } else actions.append(tel);
+        for (const [label, contactPhone] of contacts) {
+          if (!contactPhone) continue;
+          const tel = node('a', label);
+          tel.href = `tel:${contactPhone}`;
+          tel.className = 'secondary';
+          actions.append(tel);
+          const digits = phoneDigits(contactPhone);
+          if (digits.length >= 10) {
+            const wa = node('a', `واتساب · ${label.replace('اتصال ', '')}`);
+            wa.href = `https://wa.me/${digits.startsWith('0') ? `964${digits.slice(1)}` : digits}`;
+            wa.target = '_blank';
+            wa.rel = 'noopener';
+            wa.className = 'secondary';
+            actions.append(wa);
+          }
+        }
         article.append(actions);
       }
       rows.append(article);
