@@ -1,3 +1,5 @@
+alter table tkt_private.commerce_settlements add column if not exists note text;
+
 create or replace function tkt_private.inventory_finance(p_action text, p_data jsonb default '{}'::jsonb)
 returns jsonb
 language plpgsql
@@ -12,6 +14,16 @@ declare
   v_rows jsonb := '[]'::jsonb;
   v_total bigint := 0;
   v_result jsonb;
+  v_kind text;
+  v_group_id uuid;
+  v_debtor_id uuid;
+  v_restaurant_id uuid;
+  v_receipt_id uuid;
+  v_amount bigint;
+  v_due bigint;
+  v_ids uuid[];
+  v_note text;
+  v_now timestamptz;
 begin
   if auth.uid() is null or not tkt_private.dashboard_permission('inventory') then
     raise exception 'PERMISSION_DENIED';
@@ -36,6 +48,89 @@ begin
       'server_now',clock_timestamp()
     ) into v_result;
     return v_result;
+  end if;
+
+  if p_action in ('receipt_preview','record_receipt') then
+    perform tkt_private.require_dashboard('finance',p_action='record_receipt');
+    v_kind := p_data->>'kind';
+    v_group_id := nullif(p_data->>'group_id','')::uuid;
+    if v_group_id is null or v_kind is null or v_kind not in ('restaurant_fee','captain_company') then
+      raise exception 'INVALID_RECEIPT';
+    end if;
+
+    if v_kind='restaurant_fee' then
+      select coalesce(sum(d.amount),0)::bigint into v_due
+      from tkt_private.commerce_debts d
+      where d.kind='restaurant_fee' and d.settled_at is null
+        and (d.restaurant_id=v_group_id or (d.restaurant_id is null and d.debtor_id=v_group_id));
+    else
+      select coalesce(sum(d.amount),0)::bigint into v_due
+      from tkt_private.commerce_debts d
+      where d.kind='captain_company' and d.settled_at is null and d.debtor_id=v_group_id;
+    end if;
+
+    if p_action='receipt_preview' then
+      return jsonb_build_object('amount',coalesce(v_due,0));
+    end if;
+
+    v_receipt_id := nullif(p_data->>'id','')::uuid;
+    v_amount := nullif(p_data->>'amount','')::bigint;
+    v_note := nullif(trim(p_data->>'note'),'');
+    if v_receipt_id is null or v_amount is null or v_amount<=0 or v_note is not null and length(v_note)>240 then
+      raise exception 'INVALID_RECEIPT';
+    end if;
+
+    perform pg_advisory_xact_lock(hashtextextended(v_kind||':'||v_group_id::text,824));
+    if v_kind='restaurant_fee' then
+      select d.debtor_id,d.restaurant_id into v_debtor_id,v_restaurant_id
+      from tkt_private.commerce_debts d
+      where d.kind='restaurant_fee' and d.settled_at is null
+        and (d.restaurant_id=v_group_id or (d.restaurant_id is null and d.debtor_id=v_group_id))
+      order by d.created_at,d.id limit 1 for update;
+      if v_restaurant_id is null then v_debtor_id:=v_group_id; end if;
+      perform 1 from tkt_private.commerce_debts d
+      where d.kind='restaurant_fee' and d.settled_at is null
+        and (d.restaurant_id=v_group_id or (d.restaurant_id is null and d.debtor_id=v_group_id))
+      order by d.created_at,d.id for update;
+      select array_agg(d.id order by d.created_at,d.id),coalesce(sum(d.amount),0)::bigint
+        into v_ids,v_due from tkt_private.commerce_debts d
+      where d.kind='restaurant_fee' and d.settled_at is null
+        and (d.restaurant_id=v_group_id or (d.restaurant_id is null and d.debtor_id=v_group_id));
+    else
+      v_debtor_id:=v_group_id;
+      v_restaurant_id:=null;
+      perform 1 from tkt_private.commerce_debts d
+      where d.kind='captain_company' and d.settled_at is null and d.debtor_id=v_group_id
+      order by d.created_at,d.id for update;
+      select array_agg(d.id order by d.created_at,d.id),coalesce(sum(d.amount),0)::bigint
+        into v_ids,v_due from tkt_private.commerce_debts d
+      where d.kind='captain_company' and d.settled_at is null and d.debtor_id=v_group_id;
+    end if;
+
+    if exists(select 1 from tkt_private.commerce_settlements s where s.id=v_receipt_id) then
+      if exists(select 1 from tkt_private.commerce_settlements s where s.id=v_receipt_id and s.kind=v_kind and s.amount=v_amount and s.status='confirmed' and ((v_kind='restaurant_fee' and (s.restaurant_id=v_group_id or (s.restaurant_id is null and s.debtor_id=v_group_id))) or (v_kind='captain_company' and s.debtor_id=v_group_id))) then
+        return jsonb_build_object('ok',true,'id',v_receipt_id,'amount',v_amount,'idempotent',true);
+      end if;
+      raise exception 'REQUEST_CONFLICT';
+    end if;
+    if coalesce(v_due,0)=0 then raise exception 'NOTHING_DUE'; end if;
+    if v_amount<>v_due then raise exception 'AMOUNT_CHANGED'; end if;
+
+    update tkt_private.commerce_settlements s set status='expired'
+    where s.status='pending' and exists(
+      select 1 from tkt_private.commerce_settlement_items si
+      where si.settlement_id=s.id and si.debt_id=any(v_ids)
+    );
+    v_now:=clock_timestamp();
+    insert into tkt_private.commerce_settlements(id,kind,debtor_id,restaurant_id,amount,status,created_at,confirmed_at,confirmed_by,note)
+    values(v_receipt_id,v_kind,v_debtor_id,v_restaurant_id,v_amount,'confirmed',v_now,v_now,auth.uid(),v_note);
+    insert into tkt_private.commerce_settlement_items(settlement_id,debt_id)
+    select v_receipt_id,unnest(v_ids);
+    update tkt_private.commerce_debts d set settled_at=v_now,settlement_id=v_receipt_id
+    where d.id=any(v_ids) and d.settled_at is null;
+    insert into tkt_private.admin_audit(actor_id,action,entity_id,details)
+    values(auth.uid(),'commerce_receipt',v_receipt_id::text,jsonb_build_object('kind',v_kind,'amount',v_amount,'debtor_id',v_debtor_id,'restaurant_id',v_restaurant_id,'note',v_note));
+    return jsonb_build_object('ok',true,'id',v_receipt_id,'amount',v_amount,'confirmed_at',v_now);
   end if;
 
   if p_action <> 'rows' then raise exception 'UNKNOWN_ACTION'; end if;
