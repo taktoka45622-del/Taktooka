@@ -1,0 +1,38 @@
+#page-inventory .inventory-finance-section{margin-top:14px}
+#page-inventory .inventory-finance-status{min-height:1.5em;color:var(--muted);margin:8px 2px 14px}
+#page-inventory .inventory-finance-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+#page-inventory .inventory-finance-tile{width:100%;min-width:0;text-align:right;cursor:pointer;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+#page-inventory .inventory-finance-tile:hover{transform:translateY(-2px);border-color:#d9003666;box-shadow:0 9px 25px #d9003618}
+#page-inventory .inventory-finance-tile:focus-visible,.inventory-finance-dialog button:focus-visible,.inventory-finance-dialog a:focus-visible{outline:3px solid #d90036;outline-offset:3px}
+.inventory-finance-dialog{width:min(980px,calc(100vw - 28px));max-width:980px;max-height:min(90vh,1000px);padding:0;border:1px solid var(--line);border-radius:20px;background:var(--surface);color:var(--ink);box-shadow:0 22px 80px #0004}
+.inventory-finance-dialog::backdrop{background:#18101699;backdrop-filter:blur(4px)}
+.inventory-finance-dialog-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;background:var(--surface);border-bottom:1px solid var(--line)}
+.inventory-finance-dialog-head h2{margin:4px 0 0;font-size:20px}
+.inventory-finance-dialog-body{padding:20px 22px 24px;overflow:auto;max-height:calc(90vh - 78px)}
+.inventory-finance-description{color:var(--muted);line-height:1.8;margin:0 0 14px}
+.inventory-finance-toolbar{display:flex;align-items:end;gap:10px;margin:12px 0 16px}
+.inventory-finance-toolbar .field{flex:1;margin:0}
+.inventory-finance-toolbar input{width:100%;min-height:42px}
+.inventory-finance-callout{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;margin:0 0 14px;border:1px solid var(--line);border-radius:15px;background:color-mix(in srgb,var(--surface) 88%,#d90036 12%)}
+.inventory-finance-total{font-size:20px;font-weight:800;white-space:nowrap}
+.inventory-finance-rows{display:grid;gap:12px}
+.inventory-finance-row{margin:0!important;padding:16px!important;min-width:0}
+.inventory-finance-row h3{margin:0 0 10px;font-size:15px}
+.inventory-finance-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0}
+.inventory-finance-facts>div{min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--paper)}
+.inventory-finance-facts dt{font-size:11px;color:var(--muted)}
+.inventory-finance-facts dd{overflow-wrap:anywhere;margin:5px 0 0;font-size:13px;font-weight:600;line-height:1.7}
+.inventory-finance-contact{display:flex;gap:8px;margin-top:12px}
+.inventory-finance-contact a{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:7px 12px;border:1px solid var(--line);border-radius:12px;color:var(--ink);text-decoration:none;background:var(--surface)}
+.inventory-finance-empty{padding:18px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:14px}
+.inventory-finance-dialog-footer{display:flex;justify-content:space-between;gap:10px;margin-top:16px}
+@media(max-width:700px){
+ #page-inventory .inventory-finance-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ #page-inventory .inventory-finance-tile{padding:14px 12px}
+ .inventory-finance-dialog-head{padding:15px}
+ .inventory-finance-dialog-body{padding:15px}
+ .inventory-finance-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .inventory-finance-toolbar{align-items:stretch;flex-direction:column}
+ .inventory-finance-dialog-footer{align-items:stretch;flex-direction:column}
+}
+@media(max-width:390px){#page-inventory .inventory-finance-grid{grid-template-columns:1fr}}
